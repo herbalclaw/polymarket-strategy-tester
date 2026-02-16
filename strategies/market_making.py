@@ -43,16 +43,17 @@ class MarketMakingStrategy(BaseStrategy):
     
     def __init__(self, 
                  min_spread_bps: float = 40,
-                 max_position: float = 100,  # Max $ exposure
-                 quote_size: float = 10,  # $ per quote
-                 inventory_skew: float = 0.1):  # Adjust quotes based on inventory
-        super().__init__("MarketMaking")
+                 max_position: float = 100,
+                 quote_size: float = 10,
+                 inventory_skew: float = 0.1):
+        super().__init__()
+        self.name = "MarketMaking"
         self.min_spread_bps = min_spread_bps
         self.max_position = max_position
         self.quote_size = quote_size
         self.inventory_skew = inventory_skew
         
-        self.current_position = 0.0  # Positive = long, Negative = short
+        self.current_position = 0.0
         self.spread_history: List[float] = []
         self.max_history = 50
         
@@ -83,27 +84,19 @@ class MarketMakingStrategy(BaseStrategy):
         
         # Check inventory limits
         if abs(self.current_position) >= self.max_position:
-            # Need to reduce position, favor opposite side
             if self.current_position > 0:
-                # Long too much, favor selling (ask side)
                 signal_type = "down"
                 confidence = 0.75
                 reason = f"Inventory reduction: long {self.current_position:.0f}, capturing {spread_bps:.0f} bps spread"
             else:
-                # Short too much, favor buying (bid side)
                 signal_type = "up"
                 confidence = 0.75
                 reason = f"Inventory reduction: short {abs(self.current_position):.0f}, capturing {spread_bps:.0f} bps spread"
         else:
-            # Normal market making - pick side with better edge
             avg_spread = np.mean(self.spread_history) if self.spread_history else spread_bps
             
-            # If current spread > average, good opportunity
             if spread_bps > avg_spread * 1.2:
-                # Wide spread - capture it
-                # Pick direction based on recent price action
                 if data.vwap and data.price > data.vwap:
-                    # Price above VWAP, slight upward bias
                     signal_type = "up"
                     confidence = 0.65
                 else:
@@ -112,7 +105,6 @@ class MarketMakingStrategy(BaseStrategy):
                 
                 reason = f"Wide spread capture: {spread_bps:.0f} bps vs avg {avg_spread:.0f} bps"
             else:
-                # Normal spread - only trade if high confidence
                 if spread_bps > self.min_spread_bps * 1.5:
                     signal_type = "up" if np.random.random() > 0.5 else "down"
                     confidence = 0.6
@@ -140,13 +132,10 @@ class MarketMakingStrategy(BaseStrategy):
     def on_trade_complete(self, trade_result: Dict):
         """Update position tracking."""
         side = trade_result.get('side', '').upper()
-        pnl = trade_result.get('pnl_pct', 0)
         
-        # Update position
         if side == 'UP':
             self.current_position += self.quote_size
         elif side == 'DOWN':
             self.current_position -= self.quote_size
         
-        # Keep position bounded
         self.current_position = max(-self.max_position, min(self.max_position, self.current_position))

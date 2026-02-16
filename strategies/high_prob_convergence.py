@@ -41,7 +41,8 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
                  deviation_threshold: float = 0.015,
                  take_profit_bps: float = 200,
                  stop_loss_bps: float = 100):
-        super().__init__("HighProbConvergence")
+        super().__init__()
+        self.name = "HighProbConvergence"
         self.lookback_periods = lookback_periods
         self.deviation_threshold = deviation_threshold  # 1.5% deviation
         self.take_profit_bps = take_profit_bps  # 200 bps = 2%
@@ -83,9 +84,6 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
         # Z-score (how many std devs from mean)
         z_score = (current_price - mean_price) / std_price if std_price > 0 else 0
         
-        # Check if we're near market resolution (5-min markets reset every 5 min)
-        # For BTC 5-min, we can trade anytime within the window
-        
         # Generate signal based on mean reversion
         signal_type = None
         confidence = 0.0
@@ -93,7 +91,6 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
         # Strong deviation above mean = SELL (expect reversion down)
         if deviation > self.deviation_threshold and z_score > 1.5:
             signal_type = "down"
-            # Confidence based on deviation magnitude and z-score
             confidence = min(0.95, 0.6 + abs(deviation) * 10 + abs(z_score) * 0.1)
             reason = f"Mean reversion DOWN: price {deviation:.2%} above mean (z={z_score:.2f})"
         
@@ -124,8 +121,6 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
         """Update strategy based on trade result."""
         pnl = trade_result.get('pnl_pct', 0)
         if pnl > 0:
-            # Successful mean reversion - could tighten thresholds
             pass
         else:
-            # Failed - might need to widen thresholds or adjust lookback
             pass
