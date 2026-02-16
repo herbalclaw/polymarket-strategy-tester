@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from core.base_strategy import Signal
 from core.excel_reporter import ExcelReporter
 from core.github_pusher import GitHubAutoPusher
-from data.price_feed import MultiExchangeFeed
+from data.polymarket_feed import PolymarketDataFeed
 from strategies.momentum import MomentumStrategy
 from strategies.arbitrage import ArbitrageStrategy
 from strategies.vwap import VWAPStrategy
@@ -53,7 +53,7 @@ class PaperTrader:
         self.trades_executed = 0
         
         # Components
-        self.feed = MultiExchangeFeed()
+        self.feed = PolymarketDataFeed(data_collector_path="../polymarket-data-collector")
         self.reporter = ExcelReporter(
             filename="live_trading_results.xlsx",
             initial_capital=100.0,  # $100 per strategy
@@ -104,26 +104,28 @@ class PaperTrader:
         return signals
     
     async def simulate_trade_execution(self, signal: Signal, market_data) -> Dict:
-        """Simulate a paper trade from entry to exit."""
-        entry_price = market_data.vwap if market_data.vwap else market_data.price
+        """Simulate a paper trade using real Polymarket fills."""
+        # Get entry fill from Polymarket order book
+        entry_price, entry_slippage = self.feed.simulate_fill(
+            side=signal.signal,
+            size=5.0  # $5 trade size
+        )
         
         if entry_price == 0:
-            entry_price = 50000  # Default BTC price
+            logger.warning("Could not get Polymarket price, skipping trade")
+            return None
         
-        # Simulate 5-minute hold (instant for simulation)
+        # Simulate 5-minute hold
         await asyncio.sleep(0.1)
         
-        # Simulate market movement based on signal quality
-        signal_quality = signal.confidence - 0.6  # 0 to 0.35
-        expected_edge = signal_quality * 0.02  # Up to 0.7% edge
+        # Get exit fill from Polymarket (real market movement)
+        exit_price, exit_slippage = self.feed.simulate_fill(
+            side='down' if signal.signal == 'up' else 'up',  # Opposite side to close
+            size=5.0
+        )
         
-        # Add randomness
-        noise = random.gauss(0, 0.005)
-        
-        if signal.signal == "up":
-            exit_price = entry_price * (1 + expected_edge + noise)
-        else:
-            exit_price = entry_price * (1 - expected_edge - noise)
+        if exit_price == 0:
+            exit_price = entry_price  # Flat if no data
         
         # Calculate P&L
         if signal.signal == "up":
@@ -135,8 +137,10 @@ class PaperTrader:
             'signal': signal,
             'entry_price': entry_price,
             'exit_price': exit_price,
+            'entry_slippage_bps': entry_slippage,
+            'exit_slippage_bps': exit_slippage,
             'pnl_pct': pnl_pct,
-            'pnl_amount': pnl_pct * 10,  # $10 position
+            'pnl_amount': pnl_pct * 5 / 100,  # $5 position
             'exit_reason': 'time_exit_5min',
             'duration': 5,
             'success': pnl_pct > 0

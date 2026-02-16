@@ -111,6 +111,8 @@ class ExcelReporter:
                 'P&L %': 0.0,
                 'P&L $': 0.0,
                 'Capital After': self.strategy_capital.get(strategy_name, self.initial_capital),
+                'Entry Slippage (bps)': 0,
+                'Exit Slippage (bps)': 0,
                 'Confidence': round(confidence, 4),
                 'Entry Reason': entry_reason[:100] if entry_reason else '',
                 'Exit Reason': '',
