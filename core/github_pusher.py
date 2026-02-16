@@ -63,15 +63,15 @@ class GitHubAutoPusher:
                 logger.warning(f"Excel file not found: {excel_path}")
                 return False
             
-            # Stage the file
-            success, _ = self._run_git_command(['add', self.excel_filename], check=False)
+            # Stage the file (use -f to force add in case it's new)
+            success, _ = self._run_git_command(['add', '-f', self.excel_filename], check=False)
             if not success:
                 logger.error("Failed to stage Excel file")
                 return False
             
-            # Check if there are changes
-            success, diff_output = self._run_git_command(['diff', '--cached', '--quiet'], check=False)
-            if success:
+            # Check if there are changes (including new files)
+            success, diff_output = self._run_git_command(['diff', '--cached', '--stat'], check=False)
+            if success and not diff_output.strip():
                 # No changes to commit
                 logger.debug("No changes to push")
                 return True
