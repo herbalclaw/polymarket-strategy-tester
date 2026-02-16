@@ -87,21 +87,116 @@ class PolymarketDataFeed:
             self.token_window = current_window
         
         if self.up_token_id and self.down_token_id:
-            return True
+            # Verify tokens are still valid by making a test request
+            try:
+                resp = self.session.get(
+                    f"{self.REST_API}/book",
+                    params={"token_id": self.up_token_id},
+                    timeout=3
+                )
+                if resp.status_code == 200:
+                    return True
+                # Token expired, clear it
+                self.up_token_id = None
+                self.down_token_id = None
+            except:
+                pass
         
-        if not self._ensure_connection():
-            return False
+        # Try to get from database first
+        if self._ensure_connection():
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute('SELECT up_token_id, down_token_id FROM markets ORDER BY timestamp DESC LIMIT 1')
+                row = cursor.fetchone()
+                if row:
+                    self.up_token_id = row[0]
+                    self.down_token_id = row[1]
+                    # Verify these tokens are valid
+                    try:
+                        resp = self.session.get(
+                            f"{self.REST_API}/book",
+                            params={"token_id": self.up_token_id},
+                            timeout=3
+                        )
+                        if resp.status_code == 200:
+                            return True
+                    except:
+                        pass
+            except Exception as e:
+                print(f"Error fetching token IDs from DB: {e}")
         
+        # Fallback: Fetch directly from Polymarket Gamma API
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT up_token_id, down_token_id FROM markets ORDER BY timestamp DESC LIMIT 1')
-            row = cursor.fetchone()
-            if row:
-                self.up_token_id = row[0]
-                self.down_token_id = row[1]
-                return True
+            # Find the current active BTC 5-min market
+            resp = self.session.get(
+                f"{self.GAMMA_API}/events",
+                params={
+                    "active": "true",
+                    "archived": "false",
+                    "closed": "false",
+                    "limit": "20"
+                },
+                timeout=5
+            )
+            resp.raise_for_status()
+            events = resp.json()
+            
+            for event in events:
+                title = event.get('title', '').lower()
+                # Look for BTC 5-minute up/down markets
+                if 'bitcoin' in title and '5' in title and ('minute' in title or 'min' in title):
+                    markets = event.get('markets', [])
+                    for market in markets:
+                        market_title = market.get('title', '').lower()
+                        token_id = market.get('tokenId')
+                        if not token_id:
+                            continue
+                        
+                        # Check if this is an active market (not expired)
+                        end_date = market.get('endDate')
+                        if end_date:
+                            from datetime import datetime
+                            try:
+                                expiry = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                                if expiry.timestamp() < time.time():
+                                    continue  # Market expired
+                            except:
+                                pass
+                        
+                        # Assign to up or down based on title
+                        if 'up' in market_title or 'higher' in market_title:
+                            self.up_token_id = token_id
+                        elif 'down' in market_title or 'lower' in market_title:
+                            self.down_token_id = token_id
+                    
+                    if self.up_token_id and self.down_token_id:
+                        return True
+            
+            # Alternative: Try direct slug lookup for current window
+            slug = f"btc-updown-5m-{current_window}"
+            resp = self.session.get(
+                f"{self.GAMMA_API}/events",
+                params={"slug": slug},
+                timeout=5
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and len(data) > 0:
+                    event = data[0]
+                    markets = event.get('markets', [])
+                    for market in markets:
+                        token_id = market.get('tokenId')
+                        market_title = market.get('title', '').lower()
+                        if 'up' in market_title or 'higher' in market_title:
+                            self.up_token_id = token_id
+                        elif 'down' in market_title or 'lower' in market_title:
+                            self.down_token_id = token_id
+                    
+                    if self.up_token_id and self.down_token_id:
+                        return True
+                        
         except Exception as e:
-            print(f"Error fetching token IDs: {e}")
+            print(f"Error fetching token IDs from API: {e}")
         
         return False
     
