@@ -243,8 +243,8 @@ class PaperTrader:
                     if push_success:
                         logger.info(f"🚀 GitHub push successful for trade #{trade_id} close")
                 
-                # Fetch market data
-                market_data = await self.feed.fetch_data()
+                # Fetch market data (not async)
+                market_data = self.feed.fetch_data()
                 
                 # Get signals
                 signals = self.evaluate_strategies(market_data)
