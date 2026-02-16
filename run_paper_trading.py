@@ -29,6 +29,9 @@ from strategies.orderbook_imbalance import OrderBookImbalanceStrategy
 from strategies.sharp_money import SharpMoneyStrategy
 from strategies.volatility_scorer import VolatilityScorerStrategy
 from strategies.breakout_momentum import BreakoutMomentumStrategy
+from strategies.high_prob_convergence import HighProbabilityConvergenceStrategy
+from strategies.market_making import MarketMakingStrategy
+from strategies.copy_trading import CopyTradingStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -65,6 +68,9 @@ class PaperTrader:
             SharpMoneyStrategy(),
             VolatilityScorerStrategy(),
             BreakoutMomentumStrategy(),
+            HighProbabilityConvergenceStrategy(),  # APPROVED - Mean reversion
+            MarketMakingStrategy(),  # APPROVED - Spread capture
+            CopyTradingStrategy(),  # APPROVED - Whale mirror
         ]
         
         # Active position tracking
@@ -135,6 +141,7 @@ class PaperTrader:
         logger.info("  📊 Live Excel updates on EVERY trade OPEN and CLOSE")
         logger.info("  🚀 GitHub auto-push on EVERY trade event")
         logger.info(f"  🎯 {len(self.strategies)} strategies active")
+        logger.info("  🆕 NEW: HighProbConvergence, MarketMaking, CopyTrading")
         logger.info("=" * 70)
         
         # Track open positions
