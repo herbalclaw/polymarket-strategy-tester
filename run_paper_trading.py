@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Paper Trading Bot with Real Polymarket Binary Settlement
-Correctly handles BTC 5-min prediction markets (settle to $1.00 or $0.00)
+Paper Trading Bot for Polymarket BTC 5-min Markets
+Correctly handles binary settlement and position management
 """
 
 import asyncio
@@ -44,7 +44,7 @@ logger = logging.getLogger('paper_trader')
 
 
 class PaperTrader:
-    """Paper trading bot with correct binary settlement for prediction markets."""
+    """Paper trading bot for BTC 5-min prediction markets."""
     
     def __init__(self):
         self.running = False
@@ -81,20 +81,13 @@ class PaperTrader:
         strategy_names = [s.name for s in self.strategies]
         self.reporter.register_strategies(strategy_names)
         
-        # Track open positions
-        # Key: trade_id, Value: position dict with market_window info
-        self.open_positions: Dict[int, Dict] = {}
-        
-        # Track market windows we've processed
-        self.processed_windows: set = set()
+        # Track open positions per strategy
+        # Key: strategy_name, Value: position dict
+        self.open_positions: Dict[str, Dict] = {}
     
     def get_current_market_window(self) -> int:
         """Get current 5-minute market window timestamp."""
         return (int(time.time()) // 300) * 300
-    
-    def get_window_end_time(self, window_ts: int) -> datetime:
-        """Get datetime when window ends."""
-        return datetime.fromtimestamp(window_ts + 300)
     
     def evaluate_strategies(self, market_data) -> List[Signal]:
         """Get signals from active (non-bankrupt) strategies."""
@@ -110,16 +103,39 @@ class PaperTrader:
                 logger.error(f"Strategy {strategy.name} error: {e}")
         return signals
     
-    async def execute_trade(self, signal: Signal, market_window: int) -> Optional[Dict]:
+    def calculate_binary_pnl(self, entry_price: float, exit_price: float, side: str) -> Tuple[float, float]:
         """
-        Execute a trade for a specific market window.
+        Calculate P&L for binary prediction market.
         
-        For BTC 5-min markets:
-        - Entry: Buy UP or DOWN token at current price
-        - Settlement: Window closes, BTC price vs strike determines winner
-        - Winner pays $1.00, loser pays $0.00
+        For binary markets:
+        - You buy a token at price P (0.01 to 0.99)
+        - If you win: token settles to $1.00, profit = (1 - P)
+        - If you lose: token settles to $0.00, loss = -P
+        - If you exit early at price X: P&L = (X - P) / P * 100%
+        
+        Returns: (pnl_amount, pnl_pct)
         """
-        # Get entry fill
+        if side == 'up':
+            # UP token: value goes to 1.0 if BTC up, 0.0 if BTC down
+            pnl_amount = exit_price - entry_price
+        else:  # side == 'down'
+            # DOWN token: value goes to 1.0 if BTC down, 0.0 if BTC up
+            pnl_amount = exit_price - entry_price
+        
+        pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
+        
+        return pnl_amount, pnl_pct
+    
+    async def execute_entry(self, signal: Signal) -> Optional[Dict]:
+        """Open a new position."""
+        strategy_name = signal.strategy
+        
+        # Check if strategy already has open position
+        if strategy_name in self.open_positions:
+            logger.debug(f"{strategy_name} already has open position, skipping entry")
+            return None
+        
+        # Get entry fill from Polymarket
         entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
             size_dollars=5.0
@@ -133,112 +149,60 @@ class PaperTrader:
             logger.warning(f"High slippage: {entry_slippage} bps, skipping")
             return None
         
-        # Get strike price for this window
-        strike_price = self.feed.get_strike_price()
+        market_window = self.get_current_market_window()
         
-        logger.info(f"Entry: {entry_price:.4f} | Window: {market_window} | Strike: {strike_price}")
+        logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window}")
         
         return {
             'signal': signal,
             'entry_price': entry_price,
             'entry_slippage_bps': entry_slippage,
             'market_window': market_window,
-            'strike_price': strike_price,
-            'side': signal.signal,  # 'up' or 'down'
+            'side': signal.signal,
         }
     
-    def check_settlement(self, position: Dict) -> Tuple[bool, float, float]:
-        """
-        Check if position has settled and calculate P&L.
-        
-        Returns:
-            (settled, pnl_amount, pnl_pct)
-        """
-        market_window = position['market_window']
-        current_window = self.get_current_market_window()
-        
-        # Window hasn't closed yet
-        if current_window <= market_window:
-            return False, 0.0, 0.0
-        
-        # Get actual BTC price at settlement
-        settlement_price = self.feed.get_settlement_price(market_window)
-        if settlement_price is None:
-            return False, 0.0, 0.0
-        
-        strike_price = position['strike_price']
-        entry_price = position['entry_price']
+    async def execute_exit(self, position: Dict) -> Optional[Dict]:
+        """Close an existing position."""
         side = position['side']
+        entry_price = position['entry_price']
         
-        # Determine winner
-        # UP wins if settlement > strike
-        # DOWN wins if settlement < strike
-        up_wins = settlement_price > strike_price
-        down_wins = settlement_price < strike_price
+        # Get exit fill from Polymarket (same side token)
+        exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
+            side=side,
+            size_dollars=5.0
+        )
         
-        if side == 'up':
-            if up_wins:
-                # Winner: paid entry_price, receive $1.00
-                pnl_amount = 1.0 - entry_price
-                pnl_pct = (pnl_amount / entry_price) * 100
-            else:
-                # Loser: paid entry_price, receive $0.00
-                pnl_amount = -entry_price
-                pnl_pct = -100.0
-        else:  # side == 'down'
-            if down_wins:
-                # Winner: paid entry_price, receive $1.00
-                pnl_amount = 1.0 - entry_price
-                pnl_pct = (pnl_amount / entry_price) * 100
-            else:
-                # Loser: paid entry_price, receive $0.00
-                pnl_amount = -entry_price
-                pnl_pct = -100.0
+        if exit_price == 0 or exit_price == 0.5:
+            logger.warning(f"No fill for exit: {exit_status}, using entry price")
+            exit_price = entry_price
+            exit_slippage = 0
         
-        return True, pnl_amount, pnl_pct
+        # Calculate P&L
+        pnl_amount, pnl_pct = self.calculate_binary_pnl(entry_price, exit_price, side)
+        
+        return {
+            'exit_price': exit_price,
+            'exit_slippage_bps': exit_slippage,
+            'pnl_amount': pnl_amount,
+            'pnl_pct': pnl_pct,
+        }
     
     async def run(self):
         """Main trading loop."""
         self.running = True
         
         logger.info("=" * 70)
-        logger.info("🚀 PAPER TRADING BOT - Binary Settlement (Corrected)")
+        logger.info("🚀 PAPER TRADING BOT - BTC 5-min Markets")
         logger.info("=" * 70)
         logger.info(f"Strategies: {len(self.strategies)}")
         logger.info("Capital: $100 per strategy, $5 per trade")
-        logger.info("Settlement: Winner=$1.00, Loser=$0.00")
+        logger.info("Exit: Anytime (not held to settlement)")
         logger.info("=" * 70)
         
         while self.running:
             try:
                 self.cycle += 1
                 current_time = datetime.now()
-                current_window = self.get_current_market_window()
-                
-                # Check for settled positions
-                settled_trades = []
-                for trade_id, position in list(self.open_positions.items()):
-                    settled, pnl_amount, pnl_pct = self.check_settlement(position)
-                    
-                    if settled:
-                        settled_trades.append((trade_id, position, pnl_amount, pnl_pct))
-                
-                # Process settlements
-                for trade_id, position, pnl_amount, pnl_pct in settled_trades:
-                    del self.open_positions[trade_id]
-                    
-                    # Close in reporter with binary settlement
-                    self.reporter.record_trade_close(
-                        trade_id=trade_id,
-                        exit_price=1.0 if pnl_amount > 0 else 0.0,  # Winner pays 1.0, loser 0.0
-                        pnl_pct=pnl_pct,
-                        exit_reason='binary_settlement',
-                        duration_minutes=5.0
-                    )
-                    
-                    self.trades_executed += 1
-                    result_str = "WIN" if pnl_amount > 0 else "LOSE"
-                    logger.info(f"🔒 Trade #{trade_id} SETTLED | {result_str} | P&L: ${pnl_amount:+.4f} ({pnl_pct:+.1f}%)")
                 
                 # Get market data
                 try:
@@ -258,24 +222,49 @@ class PaperTrader:
                     await asyncio.sleep(5)
                     continue
                 
-                # Only trade if we're in a new window (avoid trading in closing window)
-                window_progress = time.time() % 300  # Seconds into current 5-min window
+                # Check for exit signals on open positions
+                for strategy_name, position in list(self.open_positions.items()):
+                    # Check if strategy wants to exit
+                    strategy_obj = next((s for s in self.strategies if s.name == strategy_name), None)
+                    if strategy_obj:
+                        try:
+                            # For now, use simple time-based exit (5 min max hold)
+                            # In future, strategies can generate exit signals
+                            entry_time = position.get('entry_time', current_time)
+                            hold_time = (current_time - entry_time).total_seconds()
+                            
+                            # Exit after 5 minutes or if price moved significantly
+                            entry_price = position['entry_price']
+                            current_price = market_data.price
+                            price_change_pct = abs(current_price - entry_price) / entry_price * 100
+                            
+                            should_exit = hold_time >= 300 or price_change_pct >= 10
+                            
+                            if should_exit:
+                                exit_result = await self.execute_exit(position)
+                                if exit_result:
+                                    # Record close
+                                    self.reporter.record_trade_close(
+                                        trade_id=position['trade_id'],
+                                        exit_price=exit_result['exit_price'],
+                                        pnl_pct=exit_result['pnl_pct'],
+                                        exit_reason='time_exit' if hold_time >= 300 else 'profit_taking',
+                                        duration_minutes=hold_time / 60
+                                    )
+                                    
+                                    del self.open_positions[strategy_name]
+                                    self.trades_executed += 1
+                                    
+                                    logger.info(f"🔒 Trade #{position['trade_id']} closed | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
+                        except Exception as e:
+                            logger.error(f"Error checking exit for {strategy_name}: {e}")
                 
-                # Don't trade in last 30 seconds of window (too close to settlement)
-                if window_progress > 270:
-                    logger.debug(f"Window closing ({window_progress:.0f}s), skipping entry")
-                    await asyncio.sleep(5)
-                    continue
-                
-                # Get signals
+                # Get entry signals
                 signals = self.evaluate_strategies(market_data)
                 
-                if signals:
-                    best = max(signals, key=lambda x: x.confidence)
-                    logger.info(f"🎯 SIGNAL: {best.signal.upper()} | {best.strategy} | {best.confidence:.1%}")
-                    
-                    # Execute trade for current window
-                    result = await self.execute_trade(best, current_window)
+                for signal in signals:
+                    # Execute entry
+                    result = await self.execute_entry(signal)
                     if not result:
                         continue
                     
@@ -284,28 +273,28 @@ class PaperTrader:
                     trade_id = self.trade_counter
                     
                     open_record = self.reporter.record_trade_open(
-                        strategy_name=best.strategy,
-                        signal=best,
+                        strategy_name=signal.strategy,
+                        signal=signal,
                         entry_price=result['entry_price'],
-                        entry_reason=best.reason
+                        entry_reason=signal.reason
                     )
                     
                     if not open_record:
                         continue
                     
-                    self.open_positions[trade_id] = {
+                    self.open_positions[signal.strategy] = {
+                        'trade_id': trade_id,
                         'entry_time': current_time,
                         'market_window': result['market_window'],
-                        'strike_price': result['strike_price'],
                         'entry_price': result['entry_price'],
                         'side': result['side'],
                     }
                     
-                    logger.info(f"🔓 Trade #{trade_id} opened | Price: {result['entry_price']:.4f} | Window: {result['market_window']}")
+                    logger.info(f"🔓 Trade #{trade_id} opened | {signal.strategy} | Price: {result['entry_price']:.4f}")
                 
                 # Status
                 if self.cycle % 10 == 0:
-                    logger.info(f"📊 Cycle {self.cycle} | Open: {len(self.open_positions)} | Settled: {self.trades_executed}")
+                    logger.info(f"📊 Cycle {self.cycle} | Open: {len(self.open_positions)} | Closed: {self.trades_executed}")
                 
                 await asyncio.sleep(5)
                 

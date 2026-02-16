@@ -46,6 +46,7 @@ class PolymarketDataFeed:
         # Token IDs for BTC 5-min market (will be fetched dynamically)
         self.up_token_id = None
         self.down_token_id = None
+        self.token_window = 0  # Track which window tokens belong to
         
     def _get_current_db_path(self) -> str:
         """Get path to current database file."""
@@ -77,6 +78,14 @@ class PolymarketDataFeed:
     
     def _get_token_ids(self) -> bool:
         """Fetch token IDs for current BTC 5-min market."""
+        # Check if we need to refresh (new window)
+        current_window = (int(time.time()) // 300) * 300
+        if self.token_window != current_window:
+            # New window, clear cached tokens
+            self.up_token_id = None
+            self.down_token_id = None
+            self.token_window = current_window
+        
         if self.up_token_id and self.down_token_id:
             return True
         
