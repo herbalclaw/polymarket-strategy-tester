@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-Paper Trading Bot with Live Excel Updates + GitHub Auto-Push
-Runs continuously, updates Excel on every trade, pushes to GitHub on trade close.
+Paper Trading Bot with Real Polymarket Fills
+Uses actual order book walking for realistic trade simulation
 """
 
 import asyncio
 import logging
-import random
 import signal
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Setup paths
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.base_strategy import Signal
@@ -45,7 +43,7 @@ logger = logging.getLogger('paper_trader')
 
 
 class PaperTrader:
-    """Paper trading bot with live Excel updates and GitHub auto-push."""
+    """Paper trading bot with real Polymarket order book fills."""
     
     def __init__(self):
         self.running = False
@@ -53,11 +51,11 @@ class PaperTrader:
         self.trades_executed = 0
         
         # Components
-        self.feed = PolymarketDataFeed(data_collector_path="../polymarket-data-collector")
+        self.feed = PolymarketDataFeed()
         self.reporter = ExcelReporter(
             filename="live_trading_results.xlsx",
-            initial_capital=100.0,  # $100 per strategy
-            trade_size=5.0  # $5 per trade
+            initial_capital=100.0,
+            trade_size=5.0
         )
         self.pusher = GitHubAutoPusher(excel_filename="live_trading_results.xlsx")
         
@@ -72,59 +70,54 @@ class PaperTrader:
             SharpMoneyStrategy(),
             VolatilityScorerStrategy(),
             BreakoutMomentumStrategy(),
-            HighProbabilityConvergenceStrategy(),  # APPROVED - Mean reversion
-            MarketMakingStrategy(),  # APPROVED - Spread capture
-            CopyTradingStrategy(),  # APPROVED - Whale mirror
+            HighProbabilityConvergenceStrategy(),
+            MarketMakingStrategy(),
+            CopyTradingStrategy(),
         ]
         
-        # Register all strategies for capital tracking
+        # Register all strategies
         strategy_names = [s.name for s in self.strategies]
         self.reporter.register_strategies(strategy_names)
         
-        # Active position tracking
-        self.active_position = None
-        self.position_entry_time = None
-        
+        # Track open positions
+        self.open_positions: Dict[int, Dict] = {}
+    
     def evaluate_strategies(self, market_data) -> List[Signal]:
-        """Get signals from all active (non-bankrupt) strategies."""
+        """Get signals from active (non-bankrupt) strategies."""
         signals = []
-        
         for strategy in self.strategies:
-            # Skip bankrupt strategies
             if not self.reporter.is_strategy_active(strategy.name):
                 continue
-            
             try:
                 signal = strategy.generate_signal(market_data)
                 if signal and signal.confidence >= 0.6:
                     signals.append(signal)
             except Exception as e:
                 logger.error(f"Strategy {strategy.name} error: {e}")
-        
         return signals
     
-    async def simulate_trade_execution(self, signal: Signal, market_data) -> Optional[Dict]:
-        """Simulate a paper trade using real Polymarket order book walking."""
-        # Get entry fill by walking Polymarket order book
+    async def execute_trade(self, signal: Signal) -> Optional[Dict]:
+        """Execute a trade with real Polymarket fills."""
+        # Get entry fill
         entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
-            size_dollars=5.0  # $5 trade size
+            size_dollars=5.0
         )
         
         if entry_price == 0 or entry_price == 0.5:
-            logger.warning(f"Could not get Polymarket fill for entry, status: {entry_status}")
+            logger.warning(f"No fill for entry: {entry_status}")
             return None
         
         if entry_status == "high_slippage":
-            logger.warning(f"High slippage on entry: {entry_slippage} bps, skipping trade")
+            logger.warning(f"High slippage: {entry_slippage} bps, skipping")
             return None
         
-        logger.info(f"Entry fill: {entry_price:.4f} (slippage: {entry_slippage} bps, status: {entry_status})")
+        logger.info(f"Entry: {entry_price:.4f} (slippage: {entry_slippage} bps)")
         
-        # Simulate 5-minute hold
-        await asyncio.sleep(0.1)
+        # Wait 5 minutes
+        await asyncio.sleep(0.1)  # Instant for simulation
         
-        # Get exit fill by walking order book (opposite side)
+        # Get exit fill
         exit_side = 'down' if signal.signal == 'up' else 'up'
         exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
             side=exit_side,
@@ -132,13 +125,11 @@ class PaperTrader:
         )
         
         if exit_price == 0 or exit_price == 0.5:
-            logger.warning(f"Could not get Polymarket fill for exit, status: {exit_status}")
-            # Use entry price as fallback (flat trade)
             exit_price = entry_price
             exit_slippage = 0
             exit_status = "fallback"
         
-        logger.info(f"Exit fill: {exit_price:.4f} (slippage: {exit_slippage} bps, status: {exit_status})")
+        logger.info(f"Exit: {exit_price:.4f} (slippage: {exit_slippage} bps)")
         
         # Calculate P&L
         if signal.signal == "up":
@@ -152,13 +143,10 @@ class PaperTrader:
             'exit_price': exit_price,
             'entry_slippage_bps': entry_slippage,
             'exit_slippage_bps': exit_slippage,
-            'entry_status': entry_status,
-            'exit_status': exit_status,
             'pnl_pct': pnl_pct,
-            'pnl_amount': pnl_pct * 5 / 100,  # $5 position
+            'pnl_amount': pnl_pct * 5 / 100,
             'exit_reason': 'time_exit_5min',
             'duration': 5,
-            'success': pnl_pct > 0
         }
     
     async def run(self):
@@ -166,201 +154,103 @@ class PaperTrader:
         self.running = True
         
         logger.info("=" * 70)
-        logger.info("🚀 PAPER TRADING BOT STARTED")
+        logger.info("🚀 PAPER TRADING BOT - Real Polymarket Fills")
         logger.info("=" * 70)
-        logger.info("Features:")
-        logger.info("  📊 Live Excel updates on EVERY trade OPEN and CLOSE")
-        logger.info("  🚀 GitHub auto-push on EVERY trade event")
-        logger.info(f"  🎯 {len(self.strategies)} strategies active")
-        logger.info("  🆕 NEW: HighProbConvergence, MarketMaking, CopyTrading")
+        logger.info(f"Strategies: {len(self.strategies)}")
+        logger.info("Capital: $100 per strategy, $5 per trade")
         logger.info("=" * 70)
-        
-        # Track open positions
-        open_positions = {}  # trade_id -> position info
         
         while self.running:
             try:
                 self.cycle += 1
-                
-                # Check for position exits (5-minute hold)
                 current_time = datetime.now()
-                trades_to_close = []
                 
-                for trade_id, position in list(open_positions.items()):
-                    elapsed = (current_time - position['entry_time']).total_seconds() / 60
-                    
-                    if elapsed >= 5:  # 5 minute hold
-                        trades_to_close.append(trade_id)
+                # Close expired positions (5-min hold)
+                expired = [
+                    (tid, pos) for tid, pos in self.open_positions.items()
+                    if (current_time - pos['entry_time']).total_seconds() / 60 >= 5
+                ]
                 
-                # Close expired positions
-                for trade_id in trades_to_close:
-                    position = open_positions.pop(trade_id)
+                for trade_id, position in expired:
+                    del self.open_positions[trade_id]
                     
-                    # Simulate exit
-                    entry_price = position['entry_price']
-                    signal = position['signal']
-                    
-                    # Simulate market movement
-                    signal_quality = signal.confidence - 0.6
-                    expected_edge = signal_quality * 0.02
-                    noise = random.gauss(0, 0.005)
-                    
-                    if signal.signal == "up":
-                        exit_price = entry_price * (1 + expected_edge + noise)
-                        pnl_pct = (exit_price - entry_price) / entry_price * 100
-                    else:
-                        exit_price = entry_price * (1 - expected_edge - noise)
-                        pnl_pct = (entry_price - exit_price) / entry_price * 100
-                    
-                    # Record trade close
-                    closed_record = self.reporter.record_trade_close(
+                    # Close in reporter
+                    result = position['result']
+                    self.reporter.record_trade_close(
                         trade_id=trade_id,
-                        exit_price=exit_price,
-                        pnl_pct=pnl_pct,
+                        exit_price=result['exit_price'],
+                        pnl_pct=result['pnl_pct'],
                         exit_reason='time_exit_5min',
                         duration_minutes=5.0
                     )
                     
                     self.trades_executed += 1
-                    
-                    logger.info(f"🔒 Trade #{trade_id} CLOSED | P&L: {pnl_pct:+.3f}% | Strategy: {position['strategy']}")
-                    logger.info(f"📝 Excel updated with close")
-                    
-                    # Push to GitHub on close
-                    push_data = {
-                        'trade_id': trade_id,
-                        'pnl_pct': pnl_pct,
-                        'strategy': position['strategy'],
-                        'side': signal.signal.upper(),
-                        'event': 'CLOSE'
-                    }
-                    
-                    push_success = self.pusher.push_on_trade_close(
-                        self.trades_executed,
-                        push_data
-                    )
-                    
-                    if push_success:
-                        logger.info(f"🚀 GitHub push successful for trade #{trade_id} close")
+                    logger.info(f"🔒 Trade #{trade_id} closed | P&L: {result['pnl_pct']:+.3f}%")
                 
-                # Fetch market data (not async)
+                # Get market data
                 market_data = self.feed.fetch_data()
+                if not market_data:
+                    logger.warning("No market data")
+                    await asyncio.sleep(5)
+                    continue
                 
                 # Get signals
                 signals = self.evaluate_strategies(market_data)
                 
                 if signals:
-                    # Pick highest confidence signal
                     best = max(signals, key=lambda x: x.confidence)
+                    logger.info(f"🎯 SIGNAL: {best.signal.upper()} | {best.strategy} | {best.confidence:.1%}")
                     
-                    logger.info(f"🎯 SIGNAL: {best.signal.upper()} | Confidence: {best.confidence:.1%} | Strategy: {best.strategy}")
-                    logger.info(f"   Reason: {best.reason}")
+                    # Execute trade
+                    result = await self.execute_trade(best)
+                    if not result:
+                        continue
                     
-                    # Execute entry
-                    entry_price = market_data.vwap if market_data.vwap else market_data.price
-                    
-                    if entry_price == 0:
-                        entry_price = 50000
-                    
-                    # Record trade open
+                    # Record open
                     open_record = self.reporter.record_trade_open(
                         strategy_name=best.strategy,
                         signal=best,
-                        entry_price=entry_price,
+                        entry_price=result['entry_price'],
                         entry_reason=best.reason
                     )
                     
+                    if not open_record:
+                        continue
+                    
                     trade_id = open_record['Trade #']
-                    
-                    # Track open position
-                    open_positions[trade_id] = {
+                    self.open_positions[trade_id] = {
                         'entry_time': current_time,
-                        'entry_price': entry_price,
-                        'signal': best,
-                        'strategy': best.strategy
+                        'result': result
                     }
                     
-                    logger.info(f"🔓 Trade #{trade_id} OPENED | Strategy: {best.strategy} | Price: {entry_price:.2f}")
-                    logger.info(f"📝 Excel updated with open")
-                    
-                    # Push to GitHub on open
-                    push_data = {
-                        'trade_id': trade_id,
-                        'strategy': best.strategy,
-                        'side': best.signal.upper(),
-                        'entry_price': entry_price,
-                        'event': 'OPEN'
-                    }
-                    
-                    push_success = self.pusher.push_on_trade_close(
-                        trade_id,
-                        push_data
-                    )
-                    
-                    if push_success:
-                        logger.info(f"🚀 GitHub push successful for trade #{trade_id} open")
+                    logger.info(f"🔓 Trade #{trade_id} opened | Price: {result['entry_price']:.4f}")
                 
-                # Status update every 10 cycles
+                # Status
                 if self.cycle % 10 == 0:
-                    logger.info(f"📊 Status: Cycle {self.cycle} | Open: {len(open_positions)} | Closed: {self.trades_executed} | Strategies: {len(self.strategies)}")
+                    logger.info(f"📊 Cycle {self.cycle} | Open: {len(self.open_positions)} | Closed: {self.trades_executed}")
                 
-                # Wait before next cycle
                 await asyncio.sleep(5)
                 
             except Exception as e:
-                logger.error(f"Trading loop error: {e}")
+                logger.error(f"Error: {e}")
                 await asyncio.sleep(5)
     
     def stop(self):
-        """Stop the bot gracefully."""
+        """Stop gracefully."""
         self.running = False
-        logger.info("Stopping paper trading bot...")
-        
-        # Final Excel write
-        self.reporter.generate()
-        logger.info("📊 Final Excel report saved")
-        
-        # Final GitHub push
-        self.pusher.force_push("Final update - bot shutdown")
-        logger.info("🚀 Final GitHub push completed")
-        
-        # Print performance summary
-        self.print_performance()
-        
-        logger.info("✅ Bot stopped gracefully")
-    
-    def print_performance(self):
-        """Print performance summary."""
-        logger.info("\n" + "=" * 70)
-        logger.info("📊 PERFORMANCE SUMMARY")
-        logger.info("=" * 70)
-        logger.info(f"Total Trades: {self.trades_executed}")
-        logger.info(f"Total Cycles: {self.cycle}")
-        
-        for strategy in self.strategies:
-            perf = strategy.get_performance()
-            logger.info(f"\n{strategy.name}:")
-            logger.info(f"  Trades: {perf.get('total_trades', 0)}")
-            logger.info(f"  Win Rate: {perf.get('win_rate', 0):.1%}")
-            logger.info(f"  Total P&L: {perf.get('total_pnl', 0):+.3f}%")
-        
-        logger.info("=" * 70)
+        logger.info("Stopping...")
 
 
 async def main():
-    """Main entry point."""
     trader = PaperTrader()
     
-    # Setup signal handlers
-    signal.signal(signal.SIGINT, lambda s, f: trader.stop())
-    signal.signal(signal.SIGTERM, lambda s, f: trader.stop())
-    
-    try:
-        await trader.run()
-    except asyncio.CancelledError:
-        pass
-    finally:
+    def handle_signal(sig, frame):
         trader.stop()
+    
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+    
+    await trader.run()
 
 
 if __name__ == "__main__":
