@@ -72,7 +72,7 @@ class CopyTradingStrategy(BaseStrategy):
             # "0x...",
         ]
         
-    def on_market_data(self, data: MarketData) -> Optional[Signal]:
+    def generate_signal(self, data: MarketData) -> Optional[Signal]:
         """Generate copy trading signal from whale activity."""
         # In a real implementation, this would:
         # 1. Query recent whale trades from API/blockchain

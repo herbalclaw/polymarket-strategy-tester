@@ -51,7 +51,7 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
         self.vwap_history: List[float] = []
         self.max_history = 100
         
-    def on_market_data(self, data: MarketData) -> Optional[Signal]:
+    def generate_signal(self, data: MarketData) -> Optional[Signal]:
         """Generate mean reversion signal."""
         if data.price == 0 or data.vwap == 0:
             return None

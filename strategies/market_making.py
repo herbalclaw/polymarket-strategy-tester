@@ -56,7 +56,7 @@ class MarketMakingStrategy(BaseStrategy):
         self.spread_history: List[float] = []
         self.max_history = 50
         
-    def on_market_data(self, data: MarketData) -> Optional[Signal]:
+    def generate_signal(self, data: MarketData) -> Optional[Signal]:
         """Generate market making signal based on spread."""
         if not data.order_book:
             return None
