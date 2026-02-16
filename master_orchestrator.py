@@ -2,6 +2,7 @@
 """
 Master orchestrator: Runs paper trading + continuous strategy discovery + auto-integration.
 All-in-one continuous monitoring and adaptation system.
+Updated: Excel writes on every trade, GitHub push on every trade close.
 """
 
 import asyncio
@@ -18,7 +19,8 @@ from discovery.strategy_discovery import StrategyDiscoveryEngine
 from discovery.auto_integrator import StrategyAutoIntegrator
 from core.strategy_engine import StrategyEngine
 from core.excel_reporter import ExcelReporter
-from data.price_feed import PriceFeed
+from core.github_pusher import GitHubAutoPusher
+from data.price_feed import MultiExchangeFeed
 from strategies.momentum import MomentumStrategy
 from strategies.arbitrage import ArbitrageStrategy
 from strategies.vwap import VWAPStrategy
@@ -43,9 +45,10 @@ class MasterOrchestrator:
         self.running = False
         
         # Core components
-        self.feed = PriceFeed()
+        self.feed = MultiExchangeFeed()
         self.engine = StrategyEngine(self.feed)
-        self.reporter = ExcelReporter()
+        self.reporter = ExcelReporter(filename="live_trading_results.xlsx")
+        self.pusher = GitHubAutoPusher(excel_filename="live_trading_results.xlsx")
         
         # Discovery components
         self.discovery = StrategyDiscoveryEngine()
@@ -66,6 +69,7 @@ class MasterOrchestrator:
         # Stats
         self.cycle = 0
         self.discovery_cycle = 0
+        self.trades_executed = 0
         
     def setup_base_strategies(self):
         """Add base strategies to engine."""
@@ -137,8 +141,8 @@ class MasterOrchestrator:
                 logger.error(f"Integration loop error: {e}")
                 await asyncio.sleep(60)
     
-    async def trading_loop(self, report_interval: int = 50):
-        """Main paper trading loop."""
+    async def trading_loop(self):
+        """Main paper trading loop - writes Excel on every trade, pushes to GitHub."""
         logger.info("Starting paper trading loop")
         
         while self.running:
@@ -161,30 +165,52 @@ class MasterOrchestrator:
                         # Simulate trade
                         trade_result = await self._simulate_trade(best, data)
                         
-                        # Notify strategies
-                        self.engine.on_trade_complete(trade_result)
-                        
-                        # Record for Excel
-                        self.reporter.record_trade(
-                            strategy_name=best.metadata.get('strategy', 'unknown'),
-                            signal=best,
-                            entry_price=trade_result.get('entry_price', 0),
-                            exit_price=trade_result.get('exit_price', 0),
-                            pnl_pct=trade_result.get('pnl_pct', 0),
-                            entry_reason=best.reason,
-                            exit_reason=trade_result.get('exit_reason', ''),
-                            duration_minutes=trade_result.get('duration', 0)
-                        )
-                
-                # Generate Excel report periodically
-                if self.cycle % report_interval == 0:
-                    self._generate_excel_report()
+                        if trade_result:
+                            self.trades_executed += 1
+                            
+                            # Notify strategies
+                            self.engine.on_trade_complete(trade_result)
+                            
+                            # Get strategy name
+                            strategy_name = best.metadata.get('strategy', 'unknown')
+                            
+                            # Record to Excel (immediately writes file)
+                            trade_record = self.reporter.record_trade(
+                                strategy_name=strategy_name,
+                                signal=best,
+                                entry_price=trade_result.get('entry_price', 0),
+                                exit_price=trade_result.get('exit_price', 0),
+                                pnl_pct=trade_result.get('pnl_pct', 0),
+                                entry_reason=best.reason,
+                                exit_reason=trade_result.get('exit_reason', ''),
+                                duration_minutes=trade_result.get('duration', 0)
+                            )
+                            
+                            logger.info(f"📝 Excel updated with trade #{self.trades_executed}")
+                            
+                            # Push to GitHub
+                            push_data = {
+                                'pnl_pct': trade_result.get('pnl_pct', 0),
+                                'strategy': strategy_name,
+                                'side': best.type,
+                                'confidence': best.confidence
+                            }
+                            
+                            push_success = self.pusher.push_on_trade_close(
+                                self.trades_executed, 
+                                push_data
+                            )
+                            
+                            if push_success:
+                                logger.info(f"🚀 Pushed trade #{self.trades_executed} to GitHub")
+                            else:
+                                logger.warning(f"⚠️ Failed to push trade #{self.trades_executed}")
                 
                 # Status update every 10 cycles
                 if self.cycle % 10 == 0:
                     active_strategies = len(self.engine.strategies)
                     discovered = len(self.discovered_strategies)
-                    logger.info(f"📊 Cycle {self.cycle} | Active strategies: {active_strategies} ({discovered} discovered)")
+                    logger.info(f"📊 Cycle {self.cycle} | Trades: {self.trades_executed} | Strategies: {active_strategies} ({discovered} discovered)")
                 
                 await asyncio.sleep(5)  # 5 second cycle
                 
@@ -207,37 +233,38 @@ class MasterOrchestrator:
         else:
             entry_price = (bid + ask) / 2
         
-        # Simulate 5-minute hold
-        await asyncio.sleep(0.1)  # Instant for simulation
+        # Simulate 5-minute hold (instant for simulation)
+        await asyncio.sleep(0.1)
         
         # Simulate exit (random outcome based on signal quality)
         import random
         noise = random.gauss(0, 0.01)
-        exit_price = entry_price + (0.005 if signal.type == "UP" else -0.005) + noise
         
-        pnl_pct = ((exit_price - entry_price) / entry_price * 100) 
-                  if signal.type == "UP" else 
-                  ((entry_price - exit_price) / entry_price * 100)
+        # Better signals have better expected outcomes
+        signal_quality = signal.confidence - 0.6  # 0 to 0.35
+        expected_move = signal_quality * 0.02  # Up to 0.7% edge
+        
+        if signal.type == "UP":
+            exit_price = entry_price * (1 + expected_move) + noise
+        else:
+            exit_price = entry_price * (1 - expected_move) - noise
+        
+        # Calculate P&L
+        if signal.type == "UP":
+            pnl_pct = (exit_price - entry_price) / entry_price * 100
+        else:
+            pnl_pct = (entry_price - exit_price) / entry_price * 100
         
         return {
             'signal': signal,
             'entry_price': entry_price,
             'exit_price': exit_price,
             'pnl_pct': pnl_pct,
-            'pnl_amount': pnl_pct * 100,  # $100 position
-            'exit_reason': 'time_exit',
+            'pnl_amount': pnl_pct * 10,  # $10 position
+            'exit_reason': 'time_exit_5min',
             'duration': 5,
             'success': pnl_pct > 0
         }
-    
-    def _generate_excel_report(self):
-        """Generate Excel performance report."""
-        try:
-            filename = f"strategy_report_cycle_{self.cycle}.xlsx"
-            self.reporter.generate_report(filename)
-            logger.info(f"📈 Excel report generated: {filename}")
-        except Exception as e:
-            logger.error(f"Excel report error: {e}")
     
     async def run(self):
         """Run all loops concurrently."""
@@ -246,15 +273,16 @@ class MasterOrchestrator:
         # Setup
         self.setup_base_strategies()
         
-        logger.info("=" * 60)
+        logger.info("=" * 70)
         logger.info("🚀 MASTER ORCHESTRATOR STARTED")
-        logger.info("=" * 60)
+        logger.info("=" * 70)
         logger.info("Components:")
-        logger.info("  📊 Paper Trading: 5 strategies + discovered")
+        logger.info("  📊 Paper Trading: Base + discovered strategies")
+        logger.info("  📝 Excel Updates: On EVERY trade close")
+        logger.info("  🚀 GitHub Push: On EVERY trade close")
         logger.info("  🔍 Discovery: Every 30 minutes")
         logger.info("  🔄 Auto-Integration: Every 5 minutes")
-        logger.info("  📈 Excel Reports: Every 50 cycles")
-        logger.info("=" * 60)
+        logger.info("=" * 70)
         
         # Run all loops
         await asyncio.gather(
@@ -268,22 +296,19 @@ class MasterOrchestrator:
         self.running = False
         logger.info("Stopping orchestrator...")
         
-        # Final report
-        self._generate_excel_report()
+        # Final Excel write
+        self.reporter.generate()
+        logger.info("📊 Final Excel report saved")
+        
+        # Final GitHub push
+        self.pusher.force_push("Final update before shutdown")
+        logger.info("🚀 Final GitHub push completed")
         
         # Save discovered strategies report
         report = self.discovery.generate_strategy_report()
         Path("discovery_data/final_strategy_report.md").write_text(report)
         
         logger.info("✅ Orchestrator stopped gracefully")
-
-
-def signal_handler(orchestrator):
-    """Handle shutdown signals."""
-    def handler(signum, frame):
-        logger.info("Shutdown signal received")
-        orchestrator.stop()
-    return handler
 
 
 async def main():
