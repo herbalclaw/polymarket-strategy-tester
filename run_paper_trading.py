@@ -25,6 +25,10 @@ from strategies.arbitrage import ArbitrageStrategy
 from strategies.vwap import VWAPStrategy
 from strategies.leadlag import LeadLagStrategy
 from strategies.sentiment import SentimentStrategy
+from strategies.orderbook_imbalance import OrderBookImbalanceStrategy
+from strategies.sharp_money import SharpMoneyStrategy
+from strategies.volatility_scorer import VolatilityScorerStrategy
+from strategies.breakout_momentum import BreakoutMomentumStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,6 +61,10 @@ class PaperTrader:
             VWAPStrategy(),
             LeadLagStrategy(),
             SentimentStrategy(),
+            OrderBookImbalanceStrategy(),
+            SharpMoneyStrategy(),
+            VolatilityScorerStrategy(),
+            BreakoutMomentumStrategy(),
         ]
         
         # Active position tracking
