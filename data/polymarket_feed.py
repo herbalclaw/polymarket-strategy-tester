@@ -152,14 +152,28 @@ class PolymarketDataFeed:
                         if not token_id:
                             continue
                         
-                        # Check if this is an active market (not expired)
+                        # Check if this is an active market (not expired and has started)
                         end_date = market.get('endDate')
+                        start_date = market.get('eventStartTime') or market.get('startDate')
+                        
+                        now = time.time()
+                        
                         if end_date:
                             from datetime import datetime
                             try:
                                 expiry = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                                if expiry.timestamp() < time.time():
+                                if expiry.timestamp() < now:
                                     continue  # Market expired
+                            except:
+                                pass
+                        
+                        # Check if market has started
+                        if start_date:
+                            from datetime import datetime
+                            try:
+                                start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                                if start.timestamp() > now:
+                                    continue  # Market hasn't started yet
                             except:
                                 pass
                         
@@ -185,6 +199,29 @@ class PolymarketDataFeed:
                     event = data[0]
                     markets = event.get('markets', [])
                     for market in markets:
+                        # Check if market is valid (started and not expired)
+                        end_date = market.get('endDate')
+                        start_date = market.get('eventStartTime') or market.get('startDate')
+                        now = time.time()
+                        
+                        if end_date:
+                            from datetime import datetime
+                            try:
+                                expiry = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                                if expiry.timestamp() < now:
+                                    continue  # Market expired
+                            except:
+                                pass
+                        
+                        if start_date:
+                            from datetime import datetime
+                            try:
+                                start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                                if start.timestamp() > now:
+                                    continue  # Market hasn't started yet
+                            except:
+                                pass
+                        
                         token_id = market.get('tokenId')
                         market_title = market.get('title', '').lower()
                         if 'up' in market_title or 'higher' in market_title:
