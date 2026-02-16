@@ -258,6 +258,78 @@ class PolymarketDataFeed:
             print(f"Error simulating fill: {e}")
             return 0.5, 0, "error"
     
+    def get_strike_price(self) -> Optional[float]:
+        """Get strike price for current BTC 5-min market."""
+        try:
+            current_window = (int(time.time()) // 300) * 300
+            slug = f"btc-updown-5m-{current_window}"
+            
+            resp = self.session.get(
+                f"{self.GAMMA_API}/events",
+                params={"slug": slug},
+                timeout=5
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data and len(data) > 0:
+                event = data[0]
+                # Strike price is typically in the description or title
+                # For BTC up/down, it's the current BTC price at market open
+                description = event.get('description', '')
+                # Extract strike from description like "Will BTC be above $97,500 at 12:05 PM?"
+                import re
+                match = re.search(r'\$([\d,]+(?:\.\d+)?)', description)
+                if match:
+                    return float(match.group(1).replace(',', ''))
+            
+            # Fallback: use current BTC price from Coinbase or similar
+            return self._get_external_btc_price()
+        except Exception as e:
+            print(f"Error getting strike price: {e}")
+            return None
+    
+    def _get_external_btc_price(self) -> Optional[float]:
+        """Get external BTC price as fallback."""
+        try:
+            resp = self.session.get(
+                "https://api.coinbase.com/v2/exchange-rates?currency=BTC",
+                timeout=5
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # BTC price in USD
+            btc_usd = float(data['data']['rates']['USD'])
+            return btc_usd
+        except Exception as e:
+            print(f"Error getting external BTC price: {e}")
+            return None
+    
+    def get_settlement_price(self, market_window: int) -> Optional[float]:
+        """
+        Get BTC price at settlement for a specific window.
+        
+        For paper trading, we fetch the actual BTC price at window close.
+        """
+        try:
+            # In a real implementation, this would query historical data
+            # For now, fetch current BTC price as proxy
+            # (In production, you'd use a historical price API)
+            
+            # Check if window has actually closed
+            current_time = int(time.time())
+            window_close = market_window + 300
+            
+            if current_time < window_close:
+                return None  # Window hasn't closed yet
+            
+            # For paper trading simulation, we'll use the current BTC price
+            # In reality, you'd query: "What was BTC price at exactly window_close?"
+            return self._get_external_btc_price()
+        except Exception as e:
+            print(f"Error getting settlement price: {e}")
+            return None
+    
     def get_order_book(self) -> Optional[Dict]:
         """Get current order book snapshot."""
         price = self.get_latest_price()
