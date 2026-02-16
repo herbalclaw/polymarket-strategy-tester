@@ -54,7 +54,11 @@ class PaperTrader:
         
         # Components
         self.feed = MultiExchangeFeed()
-        self.reporter = ExcelReporter(filename="live_trading_results.xlsx")
+        self.reporter = ExcelReporter(
+            filename="live_trading_results.xlsx",
+            initial_capital=100.0,  # $100 per strategy
+            trade_size=5.0  # $5 per trade
+        )
         self.pusher = GitHubAutoPusher(excel_filename="live_trading_results.xlsx")
         
         # Strategies
@@ -73,15 +77,23 @@ class PaperTrader:
             CopyTradingStrategy(),  # APPROVED - Whale mirror
         ]
         
+        # Register all strategies for capital tracking
+        strategy_names = [s.name for s in self.strategies]
+        self.reporter.register_strategies(strategy_names)
+        
         # Active position tracking
         self.active_position = None
         self.position_entry_time = None
         
     def evaluate_strategies(self, market_data) -> List[Signal]:
-        """Get signals from all strategies."""
+        """Get signals from all active (non-bankrupt) strategies."""
         signals = []
         
         for strategy in self.strategies:
+            # Skip bankrupt strategies
+            if not self.reporter.is_strategy_active(strategy.name):
+                continue
+            
             try:
                 signal = strategy.generate_signal(market_data)
                 if signal and signal.confidence >= 0.6:

@@ -1,3 +1,7 @@
+"""
+Excel Reporter with Proper Capital Tracking and Strategy Management
+"""
+
 import pandas as pd
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
@@ -8,36 +12,95 @@ import threading
 
 
 class ExcelReporter:
-    """Generate Excel reports for strategy testing - updated live on every trade."""
+    """Generate Excel reports with capital tracking and strategy failure detection."""
     
-    def __init__(self, filename: str = "live_trading_results.xlsx"):
+    def __init__(self, filename: str = "live_trading_results.xlsx", 
+                 initial_capital: float = 100.0,
+                 trade_size: float = 5.0):
         self.filename = filename
-        self.trades_data: Dict[str, List[Dict]] = {}
-        self.performance_data: Dict[str, Dict] = {}
+        self.initial_capital = initial_capital
+        self.trade_size = trade_size
+        self.current_capital = initial_capital
+        
+        # Track all strategies and their capital
+        self.strategy_capital: Dict[str, float] = {}
+        self.strategy_active: Dict[str, bool] = {}
+        self.strategy_trades: Dict[str, List[Dict]] = {}
+        
         self.closed_trades: List[Dict] = []
-        self.open_trades: List[Dict] = []  # Track open trades
+        self.open_trades: List[Dict] = []
         self.lock = threading.Lock()
         
         # Ensure file exists
         if not os.path.exists(self.filename):
             self._create_empty_file()
     
+    def register_strategies(self, strategy_names: List[str]):
+        """Register all strategies with initial capital."""
+        with self.lock:
+            for name in strategy_names:
+                if name not in self.strategy_capital:
+                    self.strategy_capital[name] = self.initial_capital
+                    self.strategy_active[name] = True
+                    self.strategy_trades[name] = []
+    
     def _create_empty_file(self):
-        """Create initial Excel file."""
+        """Create initial Excel file with proper structure."""
         with pd.ExcelWriter(self.filename, engine='openpyxl') as writer:
-            pd.DataFrame({'Status': ['Trading started - waiting for trades...']}).to_excel(
-                writer, sheet_name='Summary', index=False
-            )
+            # Summary sheet
+            summary_data = {
+                'Metric': ['Initial Capital', 'Current Capital', 'Total P&L $', 'Total P&L %', 
+                          'Total Trades', 'Winning Trades', 'Losing Trades', 'Win Rate %'],
+                'Value': [self.initial_capital, self.initial_capital, 0, 0, 0, 0, 0, 0]
+            }
+            pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+            
+            # Strategy Status sheet
+            status_data = {
+                'Strategy': [],
+                'Status': [],
+                'Capital': [],
+                'Trades': [],
+                'P&L $': [],
+                'P&L %': []
+            }
+            pd.DataFrame(status_data).to_excel(writer, sheet_name='Strategy Status', index=False)
+            
+            # All Trades sheet
+            trades_data = {
+                'Trade #': [],
+                'Date': [],
+                'Time': [],
+                'Strategy': [],
+                'Side': [],
+                'Entry Price': [],
+                'Exit Price': [],
+                'Status': [],
+                'P&L %': [],
+                'P&L $': [],
+                'Capital After': [],
+                'Confidence': [],
+                'Entry Reason': [],
+                'Exit Reason': [],
+                'Duration (min)': []
+            }
+            pd.DataFrame(trades_data).to_excel(writer, sheet_name='All Trades', index=False)
     
     def record_trade_open(self, strategy_name: str, signal, entry_price: float,
-                          entry_reason: str) -> Dict:
-        """Record a trade open and immediately update Excel."""
+                          entry_reason: str) -> Optional[Dict]:
+        """Record a trade open."""
         with self.lock:
+            # Check if strategy is active (not bankrupt)
+            if not self.strategy_active.get(strategy_name, True):
+                return None  # Don't trade if bankrupt
+            
             signal_type = getattr(signal, 'signal', None) or signal.get('type', 'UNKNOWN')
             confidence = getattr(signal, 'confidence', 0) or signal.get('confidence', 0)
             
+            trade_num = len(self.closed_trades) + len(self.open_trades) + 1
+            
             open_record = {
-                'Trade #': len(self.closed_trades) + len(self.open_trades) + 1,
+                'Trade #': trade_num,
                 'Date': datetime.now().strftime('%Y-%m-%d'),
                 'Time': datetime.now().strftime('%H:%M:%S'),
                 'Strategy': strategy_name,
@@ -47,6 +110,7 @@ class ExcelReporter:
                 'Status': 'OPEN',
                 'P&L %': 0.0,
                 'P&L $': 0.0,
+                'Capital After': self.strategy_capital.get(strategy_name, self.initial_capital),
                 'Confidence': round(confidence, 4),
                 'Entry Reason': entry_reason[:100] if entry_reason else '',
                 'Exit Reason': '',
@@ -55,17 +119,17 @@ class ExcelReporter:
             
             self.open_trades.append(open_record)
             
-            if strategy_name not in self.trades_data:
-                self.trades_data[strategy_name] = []
-            self.trades_data[strategy_name].append(open_record)
+            if strategy_name not in self.strategy_trades:
+                self.strategy_trades[strategy_name] = []
+            self.strategy_trades[strategy_name].append(open_record)
             
             self._write_excel()
             
             return open_record
     
     def record_trade_close(self, trade_id: int, exit_price: float, pnl_pct: float,
-                          exit_reason: str, duration_minutes: float) -> Dict:
-        """Record a trade close and immediately update Excel."""
+                          exit_reason: str, duration_minutes: float) -> Optional[Dict]:
+        """Record a trade close and update capital."""
         with self.lock:
             # Find the open trade
             open_trade = None
@@ -79,13 +143,28 @@ class ExcelReporter:
             if open_trade is None:
                 return None
             
+            strategy_name = open_trade['Strategy']
+            
+            # Calculate P&L in dollars based on trade size
+            pnl_dollars = (pnl_pct / 100) * self.trade_size
+            
+            # Update strategy capital
+            old_capital = self.strategy_capital.get(strategy_name, self.initial_capital)
+            new_capital = old_capital + pnl_dollars
+            self.strategy_capital[strategy_name] = new_capital
+            
+            # Check for bankruptcy (capital <= 0)
+            if new_capital <= 0:
+                self.strategy_active[strategy_name] = False
+            
             # Create closed trade record
             closed_record = {
                 **open_trade,
                 'Exit Price': round(exit_price, 6),
                 'Status': 'CLOSED',
                 'P&L %': round(pnl_pct, 4),
-                'P&L $': round(pnl_pct * 10, 2),
+                'P&L $': round(pnl_dollars, 2),
+                'Capital After': round(new_capital, 2),
                 'Exit Reason': exit_reason[:100] if exit_reason else '',
                 'Duration (min)': round(duration_minutes, 2),
             }
@@ -96,240 +175,136 @@ class ExcelReporter:
             # Add to closed trades
             self.closed_trades.append(closed_record)
             
-            # Update in strategy data
-            strategy_name = closed_record['Strategy']
-            if strategy_name in self.trades_data:
-                # Replace the open trade with closed trade
-                for idx, trade in enumerate(self.trades_data[strategy_name]):
+            # Update in strategy trades
+            if strategy_name in self.strategy_trades:
+                for idx, trade in enumerate(self.strategy_trades[strategy_name]):
                     if trade['Trade #'] == trade_id:
-                        self.trades_data[strategy_name][idx] = closed_record
+                        self.strategy_trades[strategy_name][idx] = closed_record
                         break
             
-            self._update_performance_metrics(strategy_name)
             self._write_excel()
             
             return closed_record
-
-    def record_trade(self, strategy_name: str, signal, entry_price: float, 
-                     exit_price: float, pnl_pct: float, entry_reason: str,
-                     exit_reason: str, duration_minutes: float):
-        """Legacy method - records a completed trade in one step."""
-        # Record as open then immediately close
-        signal_copy = type('obj', (object,), {'signal': getattr(signal, 'signal', 'UNKNOWN'), 
-                                              'confidence': getattr(signal, 'confidence', 0)})()
-        open_record = self.record_trade_open(strategy_name, signal_copy, entry_price, entry_reason)
-        return self.record_trade_close(open_record['Trade #'], exit_price, pnl_pct, exit_reason, duration_minutes)
-    
-    def _update_performance_metrics(self, strategy: str):
-        """Calculate performance metrics for a strategy."""
-        trades = self.trades_data.get(strategy, [])
-        
-        if not trades:
-            return
-        
-        pnls = [t['P&L %'] for t in trades]
-        wins = [p for p in pnls if p > 0]
-        losses = [p for p in pnls if p < 0]
-        
-        total_pnl = sum(pnls)
-        win_count = len(wins)
-        loss_count = len(losses)
-        total = len(pnls)
-        
-        self.performance_data[strategy] = {
-            'total_trades': total,
-            'winning_trades': win_count,
-            'losing_trades': loss_count,
-            'win_rate': win_count / total if total > 0 else 0,
-            'total_pnl': total_pnl,
-            'avg_pnl': total_pnl / total if total > 0 else 0,
-            'avg_win': sum(wins) / len(wins) if wins else 0,
-            'avg_loss': sum(losses) / len(losses) if losses else 0,
-            'max_drawdown': min(pnls) if pnls else 0,
-            'profit_factor': abs(sum(wins) / sum(losses)) if losses and sum(losses) != 0 else float('inf'),
-            'win_loss_ratio': abs((sum(wins) / len(wins)) / (sum(losses) / len(losses))) if wins and losses else 0,
-        }
     
     def _write_excel(self):
-        """Write current state to Excel file."""
+        """Write all data to Excel file."""
         try:
             with pd.ExcelWriter(self.filename, engine='openpyxl') as writer:
+                # Write Summary sheet
                 self._write_summary_sheet(writer)
                 
-                for strategy, trades in self.trades_data.items():
-                    self._write_strategy_sheet(writer, strategy, trades)
+                # Write Strategy Status sheet
+                self._write_strategy_status_sheet(writer)
                 
-                self._write_all_trades_sheet(writer)
-                self._write_comparison_sheet(writer)
+                # Write All Trades sheet
+                self._write_trades_sheet(writer)
+                
+                # Write per-strategy sheets
+                self._write_strategy_sheets(writer)
                 
         except Exception as e:
             print(f"Error writing Excel: {e}")
     
-    def generate(self):
-        """Force regenerate Excel file."""
-        self._write_excel()
-        return self.filename
-    
-    def get_last_trade(self) -> Optional[Dict]:
-        """Get the most recent closed trade."""
-        return self.closed_trades[-1] if self.closed_trades else None
-    
-    def get_closed_trades_count(self) -> int:
-        """Get total number of closed trades."""
-        return len(self.closed_trades)
-    
     def _write_summary_sheet(self, writer):
-        """Write summary sheet with current performance."""
-        summary_data = []
-        
+        """Write summary statistics."""
+        # Calculate totals
         total_trades = len(self.closed_trades)
-        if total_trades > 0:
-            all_pnls = [t['P&L %'] for t in self.closed_trades]
-            total_pnl = sum(all_pnls)
-            wins = [p for p in all_pnls if p > 0]
-            
-            summary_data.append({
-                'Metric': 'OVERALL',
-                'Strategy': 'ALL COMBINED',
-                'Total Trades': total_trades,
-                'Win Rate': f"{len(wins)/total_trades:.1%}" if total_trades > 0 else "0%",
-                'Total P&L %': f"{total_pnl:+.4f}%",
-                'Avg Trade': f"{total_pnl/total_trades:+.4f}%" if total_trades > 0 else "0%",
-            })
+        winning_trades = sum(1 for t in self.closed_trades if t['P&L $'] > 0)
+        losing_trades = sum(1 for t in self.closed_trades if t['P&L $'] < 0)
+        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
         
-        for strategy, metrics in self.performance_data.items():
-            summary_data.append({
-                'Metric': 'STRATEGY',
-                'Strategy': strategy,
-                'Total Trades': metrics.get('total_trades', 0),
-                'Win Rate': f"{metrics.get('win_rate', 0):.1%}",
-                'Total P&L %': f"{metrics.get('total_pnl', 0):+.4f}%",
-                'Avg Trade': f"{metrics.get('avg_pnl', 0):+.4f}%",
-            })
+        total_pnl_dollars = sum(t['P&L $'] for t in self.closed_trades)
+        total_pnl_pct = (total_pnl_dollars / (total_trades * self.trade_size) * 100) if total_trades > 0 else 0
+        
+        current_total_capital = sum(self.strategy_capital.values())
+        
+        summary_data = {
+            'Metric': ['Initial Capital', 'Current Capital', 'Total P&L $', 'Total P&L %', 
+                      'Total Trades', 'Winning Trades', 'Losing Trades', 'Win Rate %',
+                      'Trade Size', 'Active Strategies', 'Bankrupt Strategies'],
+            'Value': [
+                self.initial_capital * len(self.strategy_capital),
+                round(current_total_capital, 2),
+                round(total_pnl_dollars, 2),
+                round(total_pnl_pct, 2),
+                total_trades,
+                winning_trades,
+                losing_trades,
+                round(win_rate, 2),
+                self.trade_size,
+                sum(1 for active in self.strategy_active.values() if active),
+                sum(1 for active in self.strategy_active.values() if not active)
+            ]
+        }
         
         df = pd.DataFrame(summary_data)
         df.to_excel(writer, sheet_name='Summary', index=False)
         
+        # Format
         worksheet = writer.sheets['Summary']
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+        worksheet.column_dimensions['A'].width = 20
+        worksheet.column_dimensions['B'].width = 15
     
-    def _write_strategy_sheet(self, writer, strategy: str, trades: List[Dict]):
-        """Write individual strategy sheet with formatting."""
-        if not trades:
-            df = pd.DataFrame({'Status': ['No trades for this strategy yet']})
-        else:
-            df = pd.DataFrame(trades)
+    def _write_strategy_status_sheet(self, writer):
+        """Write strategy status with capital and bankruptcy info."""
+        status_data = {
+            'Strategy': [],
+            'Status': [],
+            'Capital': [],
+            'Trades': [],
+            'P&L $': [],
+            'P&L %': [],
+            'Win Rate %': []
+        }
         
-        sheet_name = strategy[:31]
-        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        for strategy_name in sorted(self.strategy_capital.keys()):
+            trades = self.strategy_trades.get(strategy_name, [])
+            closed = [t for t in trades if t['Status'] == 'CLOSED']
+            
+            total_pnl = sum(t['P&L $'] for t in closed)
+            initial = self.initial_capital
+            pnl_pct = ((self.strategy_capital[strategy_name] - initial) / initial * 100) if initial > 0 else 0
+            
+            wins = sum(1 for t in closed if t['P&L $'] > 0)
+            win_rate = (wins / len(closed) * 100) if closed else 0
+            
+            status = 'ACTIVE' if self.strategy_active.get(strategy_name, True) else 'BANKRUPT'
+            
+            status_data['Strategy'].append(strategy_name)
+            status_data['Status'].append(status)
+            status_data['Capital'].append(round(self.strategy_capital[strategy_name], 2))
+            status_data['Trades'].append(len(closed))
+            status_data['P&L $'].append(round(total_pnl, 2))
+            status_data['P&L %'].append(round(pnl_pct, 2))
+            status_data['Win Rate %'].append(round(win_rate, 2))
         
-        worksheet = writer.sheets[sheet_name]
-        
-        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
-        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
-        
-        for row_idx, row in enumerate(worksheet.iter_rows(min_row=2, max_row=worksheet.max_row), start=2):
-            if len(row) > 7:
-                pnl_cell = row[7]
-                if pnl_cell.value is not None:
-                    try:
-                        val = float(pnl_cell.value)
-                        if val > 0:
-                            pnl_cell.fill = green_fill
-                        elif val < 0:
-                            pnl_cell.fill = red_fill
-                    except (ValueError, TypeError):
-                        pass
-        
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+        df = pd.DataFrame(status_data)
+        df.to_excel(writer, sheet_name='Strategy Status', index=False)
     
-    def _write_all_trades_sheet(self, writer):
-        """Write all trades combined, sorted by time."""
-        if self.closed_trades:
-            sorted_trades = sorted(self.closed_trades, key=lambda x: x['Date'] + ' ' + x['Time'])
-            df = pd.DataFrame(sorted_trades)
+    def _write_trades_sheet(self, writer):
+        """Write all trades."""
+        all_trades = self.closed_trades + self.open_trades
+        all_trades.sort(key=lambda x: x['Trade #'])
+        
+        if all_trades:
+            df = pd.DataFrame(all_trades)
+            df.to_excel(writer, sheet_name='All Trades', index=False)
         else:
-            df = pd.DataFrame({'Status': ['No trades yet']})
-        
-        df.to_excel(writer, sheet_name='All Trades', index=False)
-        
-        worksheet = writer.sheets['All Trades']
-        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
-        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
-        
-        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
-            if len(row) > 7:
-                pnl_cell = row[7]
-                if pnl_cell.value is not None:
-                    try:
-                        val = float(pnl_cell.value)
-                        if val > 0:
-                            pnl_cell.fill = green_fill
-                        elif val < 0:
-                            pnl_cell.fill = red_fill
-                    except:
-                        pass
-        
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+            pd.DataFrame().to_excel(writer, sheet_name='All Trades', index=False)
     
-    def _write_comparison_sheet(self, writer):
-        """Write strategy comparison metrics."""
-        comparison_data = []
-        
-        for strategy, metrics in self.performance_data.items():
-            comparison_data.append({
-                'Strategy': strategy,
-                'Total Trades': metrics.get('total_trades', 0),
-                'Win Rate': f"{metrics.get('win_rate', 0):.1%}",
-                'Profit Factor': f"{metrics.get('profit_factor', 0):.2f}",
-                'Avg Win %': f"{metrics.get('avg_win', 0):+.4f}%",
-                'Avg Loss %': f"{metrics.get('avg_loss', 0):+.4f}%",
-                'Win/Loss Ratio': f"{metrics.get('win_loss_ratio', 0):.2f}",
-                'Max Drawdown': f"{metrics.get('max_drawdown', 0):+.4f}%",
-            })
-        
-        if not comparison_data:
-            df = pd.DataFrame({'Status': ['No data yet']})
-        else:
-            df = pd.DataFrame(comparison_data)
-        
-        df.to_excel(writer, sheet_name='Comparison', index=False)
-        
-        worksheet = writer.sheets['Comparison']
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if cell.value and len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+    def _write_strategy_sheets(self, writer):
+        """Write individual strategy sheets."""
+        for strategy_name, trades in self.strategy_trades.items():
+            sheet_name = strategy_name[:31]  # Excel sheet name limit
+            
+            if trades:
+                df = pd.DataFrame(trades)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    def is_strategy_active(self, strategy_name: str) -> bool:
+        """Check if a strategy is still active (not bankrupt)."""
+        return self.strategy_active.get(strategy_name, True)
+    
+    def get_strategy_capital(self, strategy_name: str) -> float:
+        """Get current capital for a strategy."""
+        return self.strategy_capital.get(strategy_name, self.initial_capital)
