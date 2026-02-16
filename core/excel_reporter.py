@@ -14,7 +14,7 @@ class ExcelReporter:
         self.filename = filename
         self.trades_data: Dict[str, List[Dict]] = {}
         self.performance_data: Dict[str, Dict] = {}
-        self.closed_trades: List[Dict] = []  # Track closed trades for GitHub push
+        self.closed_trades: List[Dict] = []
         self.lock = threading.Lock()
         
         # Ensure file exists
@@ -33,7 +33,6 @@ class ExcelReporter:
                      exit_reason: str, duration_minutes: float):
         """Record a completed trade and immediately update Excel."""
         with self.lock:
-            # Handle both Signal objects and dicts
             signal_type = getattr(signal, 'signal', None) or signal.get('type', 'UNKNOWN')
             confidence = getattr(signal, 'confidence', 0) or signal.get('confidence', 0)
             
@@ -46,7 +45,7 @@ class ExcelReporter:
                 'Entry Price': round(entry_price, 6),
                 'Exit Price': round(exit_price, 6),
                 'P&L %': round(pnl_pct, 4),
-                'P&L $': round(pnl_pct * 10, 2),  # $10 position size
+                'P&L $': round(pnl_pct * 10, 2),
                 'Confidence': round(confidence, 4),
                 'Entry Reason': entry_reason[:100] if entry_reason else '',
                 'Exit Reason': exit_reason[:100] if exit_reason else '',
@@ -55,15 +54,11 @@ class ExcelReporter:
             
             self.closed_trades.append(trade_record)
             
-            # Update strategy-specific data
             if strategy_name not in self.trades_data:
                 self.trades_data[strategy_name] = []
             self.trades_data[strategy_name].append(trade_record)
             
-            # Update performance metrics
             self._update_performance_metrics(strategy_name)
-            
-            # Immediately write to Excel
             self._write_excel()
             
             return trade_record
@@ -102,40 +97,16 @@ class ExcelReporter:
         """Write current state to Excel file."""
         try:
             with pd.ExcelWriter(self.filename, engine='openpyxl') as writer:
-                # Summary sheet
                 self._write_summary_sheet(writer)
                 
-                # Individual strategy sheets
                 for strategy, trades in self.trades_data.items():
                     self._write_strategy_sheet(writer, strategy, trades)
                 
-                # All trades sheet
                 self._write_all_trades_sheet(writer)
-                
-                # Comparison sheet
                 self._write_comparison_sheet(writer)
                 
         except Exception as e:
             print(f"Error writing Excel: {e}")
-    
-    def add_trade(self, strategy: str, trade: Dict):
-        """Legacy method - use record_trade for new trades."""
-        # Convert to new format
-        self.record_trade(
-            strategy_name=strategy,
-            signal=trade,
-            entry_price=trade.get('entry_price', 0),
-            exit_price=trade.get('exit_price', 0),
-            pnl_pct=trade.get('pnl', 0),
-            entry_reason=trade.get('reason', ''),
-            exit_reason=trade.get('exit_reason', ''),
-            duration_minutes=trade.get('duration_min', 0)
-        )
-    
-    def update_performance(self, strategy: str, metrics: Dict):
-        """Update performance metrics."""
-        self.performance_data[strategy] = metrics
-        self._write_excel()
     
     def generate(self):
         """Force regenerate Excel file."""
@@ -149,58 +120,11 @@ class ExcelReporter:
     def get_closed_trades_count(self) -> int:
         """Get total number of closed trades."""
         return len(self.closed_trades)
-        """Add a trade to the report."""
-        if strategy not in self.trades_data:
-            self.trades_data[strategy] = []
-        
-        # Enrich trade data
-        trade_record = {
-            'Trade #': len(self.trades_data[strategy]) + 1,
-            'Date': datetime.fromtimestamp(trade.get('timestamp', 0)).strftime('%Y-%m-%d'),
-            'Time': datetime.fromtimestamp(trade.get('timestamp', 0)).strftime('%H:%M:%S'),
-            'Strategy': strategy,
-            'Side': trade.get('side', '').upper(),
-            'Entry Price': trade.get('entry_price', 0),
-            'Exit Price': trade.get('exit_price', 0),
-            'P&L %': trade.get('pnl', 0),
-            'P&L $': trade.get('pnl', 0) * 5,  # Assuming $5 bet
-            'Confidence': trade.get('confidence', 0),
-            'Entry Reason': trade.get('reason', ''),
-            'Exit Reason': trade.get('exit_reason', ''),
-            'Duration (min)': trade.get('duration_min', 0),
-        }
-        
-        self.trades_data[strategy].append(trade_record)
-    
-    def update_performance(self, strategy: str, metrics: Dict):
-        """Update performance metrics."""
-        self.performance_data[strategy] = metrics
-    
-    def generate(self):
-        """Generate Excel file with multiple sheets."""
-        with pd.ExcelWriter(self.filename, engine='openpyxl') as writer:
-            
-            # Sheet 1: Summary
-            self._write_summary_sheet(writer)
-            
-            # Sheet 2-6: Individual strategy trades
-            for strategy, trades in self.trades_data.items():
-                self._write_strategy_sheet(writer, strategy, trades)
-            
-            # Sheet 7: All Trades Combined
-            self._write_all_trades_sheet(writer)
-            
-            # Sheet 8: Performance Comparison
-            self._write_comparison_sheet(writer)
-        
-        print(f"✅ Excel report generated: {self.filename}")
-        return self.filename
     
     def _write_summary_sheet(self, writer):
         """Write summary sheet with current performance."""
         summary_data = []
         
-        # Add overall stats
         total_trades = len(self.closed_trades)
         if total_trades > 0:
             all_pnls = [t['P&L %'] for t in self.closed_trades]
@@ -216,7 +140,6 @@ class ExcelReporter:
                 'Avg Trade': f"{total_pnl/total_trades:+.4f}%" if total_trades > 0 else "0%",
             })
         
-        # Per-strategy stats
         for strategy, metrics in self.performance_data.items():
             summary_data.append({
                 'Metric': 'STRATEGY',
@@ -230,7 +153,6 @@ class ExcelReporter:
         df = pd.DataFrame(summary_data)
         df.to_excel(writer, sheet_name='Summary', index=False)
         
-        # Format
         worksheet = writer.sheets['Summary']
         for column in worksheet.columns:
             max_length = 0
@@ -250,20 +172,17 @@ class ExcelReporter:
         else:
             df = pd.DataFrame(trades)
         
-        # Sheet name limited to 31 chars
         sheet_name = strategy[:31]
         df.to_excel(writer, sheet_name=sheet_name, index=False)
         
-        # Formatting
         worksheet = writer.sheets[sheet_name]
         
-        # Color code P&L column (index 7)
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
         
         for row_idx, row in enumerate(worksheet.iter_rows(min_row=2, max_row=worksheet.max_row), start=2):
             if len(row) > 7:
-                pnl_cell = row[7]  # P&L % column
+                pnl_cell = row[7]
                 if pnl_cell.value is not None:
                     try:
                         val = float(pnl_cell.value)
@@ -274,7 +193,6 @@ class ExcelReporter:
                     except (ValueError, TypeError):
                         pass
         
-        # Auto-adjust column widths
         for column in worksheet.columns:
             max_length = 0
             column_letter = column[0].column_letter
@@ -289,18 +207,13 @@ class ExcelReporter:
     def _write_all_trades_sheet(self, writer):
         """Write all trades combined, sorted by time."""
         if self.closed_trades:
-            # Sort by date/time
-            sorted_trades = sorted(
-                self.closed_trades, 
-                key=lambda x: x['Date'] + ' ' + x['Time']
-            )
+            sorted_trades = sorted(self.closed_trades, key=lambda x: x['Date'] + ' ' + x['Time'])
             df = pd.DataFrame(sorted_trades)
         else:
             df = pd.DataFrame({'Status': ['No trades yet']})
         
         df.to_excel(writer, sheet_name='All Trades', index=False)
         
-        # Format
         worksheet = writer.sheets['All Trades']
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
@@ -318,7 +231,6 @@ class ExcelReporter:
                     except:
                         pass
         
-        # Auto-adjust
         for column in worksheet.columns:
             max_length = 0
             column_letter = column[0].column_letter
@@ -353,7 +265,6 @@ class ExcelReporter:
         
         df.to_excel(writer, sheet_name='Comparison', index=False)
         
-        # Auto-adjust
         worksheet = writer.sheets['Comparison']
         for column in worksheet.columns:
             max_length = 0
