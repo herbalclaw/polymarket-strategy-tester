@@ -343,7 +343,7 @@ class PaperTrader:
                             self.trades_executed += 1
                             
                             # Record close
-                            self.reporter.record_trade_close(
+                            closed_trade = self.reporter.record_trade_close(
                                 trade_id=position['trade_id'],
                                 exit_price=settlement['exit_price'],
                                 pnl_pct=settlement['pnl_pct'],
@@ -351,6 +351,13 @@ class PaperTrader:
                                 duration_minutes=5.0,
                                 pnl_amount=settlement['pnl_amount']
                             )
+                            
+                            # Push to GitHub
+                            if closed_trade:
+                                self.pusher.push_on_trade_close(
+                                    len(self.reporter.closed_trades),
+                                    closed_trade
+                                )
                             
                             logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.1f}%)")
                             continue
@@ -373,7 +380,7 @@ class PaperTrader:
                                 self.trades_executed += 1
                                 
                                 # Record close
-                                self.reporter.record_trade_close(
+                                closed_trade = self.reporter.record_trade_close(
                                     trade_id=position['trade_id'],
                                     exit_price=exit_result['exit_price'],
                                     pnl_pct=exit_result['pnl_pct'],
@@ -381,6 +388,13 @@ class PaperTrader:
                                     duration_minutes=hold_time / 60,
                                     pnl_amount=exit_result['pnl_amount']
                                 )
+                                
+                                # Push to GitHub
+                                if closed_trade:
+                                    self.pusher.push_on_trade_close(
+                                        len(self.reporter.closed_trades),
+                                        closed_trade
+                                    )
                                 
                                 logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
                                 
