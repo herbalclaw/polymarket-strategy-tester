@@ -159,8 +159,8 @@ class PaperTrader:
             size_dollars=5.0
         )
         
-        # EDGE CASE: Invalid price
-        if entry_price <= 0.01 or entry_price >= 0.99 or entry_price == 0.5:
+        # EDGE CASE: Invalid price (allow 0.01 and 0.99, reject 0.50 default)
+        if entry_price < 0.01 or entry_price > 0.99 or entry_price == 0.5:
             logger.warning(f"Invalid entry price: {entry_price}, skipping")
             return None
         
