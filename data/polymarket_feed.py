@@ -318,13 +318,12 @@ class PolymarketDataFeed:
         """
         Get BTC price at settlement for a specific window.
         
-        For paper trading, we fetch the actual BTC price at window close.
+        NOTE: This currently uses external API which may not be accurate.
+        For true settlement, we need historical BTC price at window close.
+        
+        Returns None to disable automatic expiry settlement until proper data available.
         """
         try:
-            # In a real implementation, this would query historical data
-            # For now, fetch current BTC price as proxy
-            # (In production, you'd use a historical price API)
-            
             # Check if window has actually closed
             current_time = int(time.time())
             window_close = market_window + 300
@@ -332,9 +331,11 @@ class PolymarketDataFeed:
             if current_time < window_close:
                 return None  # Window hasn't closed yet
             
-            # For paper trading simulation, we'll use the current BTC price
-            # In reality, you'd query: "What was BTC price at exactly window_close?"
-            return self._get_external_btc_price()
+            # TEMPORARY: Disable automatic expiry settlement
+            # We don't have reliable historical BTC price data
+            # Positions should be exited manually or will be marked as stale
+            return None
+            
         except Exception as e:
             print(f"Error getting settlement price: {e}")
             return None
