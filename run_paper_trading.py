@@ -63,40 +63,29 @@ class PaperTrader:
         self.active_position = None
         self.position_entry_time = None
         
-    def evaluate_strategies(self, data: Dict) -> List[Signal]:
+    def evaluate_strategies(self, market_data) -> List[Signal]:
         """Get signals from all strategies."""
         signals = []
         
         for strategy in self.strategies:
             try:
-                signal = strategy.generate_signal(data)
+                signal = strategy.generate_signal(market_data)
                 if signal and signal.confidence >= 0.6:
-                    # Add strategy name to metadata
-                    if not hasattr(signal, 'metadata') or signal.metadata is None:
-                        signal.metadata = {}
-                    signal.metadata['strategy'] = strategy.name
                     signals.append(signal)
             except Exception as e:
                 logger.error(f"Strategy {strategy.name} error: {e}")
         
         return signals
     
-    async def simulate_trade_execution(self, signal: Signal, data: Dict) -> Dict:
+    async def simulate_trade_execution(self, signal: Signal, market_data) -> Dict:
         """Simulate a paper trade from entry to exit."""
-        prices = data.get('exchange_prices', {})
-        
-        # Get entry price (use first available exchange)
-        entry_price = 0.5
-        for ex, pdata in prices.items():
-            if 'price' in pdata:
-                entry_price = pdata['price']
-                break
+        entry_price = market_data.vwap if market_data.vwap else market_data.price
         
         if entry_price == 0:
             entry_price = 50000  # Default BTC price
         
-        # Simulate 5-minute hold
-        await asyncio.sleep(0.1)  # Instant for simulation
+        # Simulate 5-minute hold (instant for simulation)
+        await asyncio.sleep(0.1)
         
         # Simulate market movement based on signal quality
         signal_quality = signal.confidence - 0.6  # 0 to 0.35
@@ -105,13 +94,13 @@ class PaperTrader:
         # Add randomness
         noise = random.gauss(0, 0.005)
         
-        if signal.type == "UP":
+        if signal.signal == "up":
             exit_price = entry_price * (1 + expected_edge + noise)
         else:
-            exit_price = entry_price * (1 - expected_edge + noise)
+            exit_price = entry_price * (1 - expected_edge - noise)
         
         # Calculate P&L
-        if signal.type == "UP":
+        if signal.signal == "up":
             pnl_pct = (exit_price - entry_price) / entry_price * 100
         else:
             pnl_pct = (entry_price - exit_price) / entry_price * 100
@@ -146,38 +135,30 @@ class PaperTrader:
                 
                 # Fetch market data
                 market_data = await self.feed.fetch_data()
-                data = {
-                    'exchange_prices': market_data.exchange_prices,
-                    'price': market_data.price,
-                    'vwap': market_data.vwap,
-                    'sentiment': 'neutral',
-                    'timestamp': market_data.timestamp
-                }
                 
                 # Get signals
-                signals = self.evaluate_strategies(data)
+                signals = self.evaluate_strategies(market_data)
                 
                 if signals:
                     # Pick highest confidence signal
                     best = max(signals, key=lambda x: x.confidence)
                     
-                    logger.info(f"🎯 SIGNAL: {best.type} | Confidence: {best.confidence:.1%} | Strategy: {best.metadata.get('strategy', 'unknown')}")
+                    logger.info(f"🎯 SIGNAL: {best.signal.upper()} | Confidence: {best.confidence:.1%} | Strategy: {best.strategy}")
                     logger.info(f"   Reason: {best.reason}")
                     
                     # Execute paper trade
-                    trade_result = await self.simulate_trade_execution(best, data)
+                    trade_result = await self.simulate_trade_execution(best, market_data)
                     self.trades_executed += 1
                     
                     # Update strategy performance
                     for strategy in self.strategies:
-                        if strategy.name == best.metadata.get('strategy'):
+                        if strategy.name == best.strategy:
                             strategy.on_trade_complete(trade_result)
                             break
                     
                     # Record to Excel (immediately writes file)
-                    strategy_name = best.metadata.get('strategy', 'unknown')
                     trade_record = self.reporter.record_trade(
-                        strategy_name=strategy_name,
+                        strategy_name=best.strategy,
                         signal=best,
                         entry_price=trade_result['entry_price'],
                         exit_price=trade_result['exit_price'],
@@ -192,8 +173,8 @@ class PaperTrader:
                     # Push to GitHub
                     push_data = {
                         'pnl_pct': trade_result['pnl_pct'],
-                        'strategy': strategy_name,
-                        'side': best.type,
+                        'strategy': best.strategy,
+                        'side': best.signal.upper(),
                         'confidence': best.confidence
                     }
                     

@@ -33,19 +33,23 @@ class ExcelReporter:
                      exit_reason: str, duration_minutes: float):
         """Record a completed trade and immediately update Excel."""
         with self.lock:
+            # Handle both Signal objects and dicts
+            signal_type = getattr(signal, 'signal', None) or signal.get('type', 'UNKNOWN')
+            confidence = getattr(signal, 'confidence', 0) or signal.get('confidence', 0)
+            
             trade_record = {
                 'Trade #': len(self.closed_trades) + 1,
                 'Date': datetime.now().strftime('%Y-%m-%d'),
                 'Time': datetime.now().strftime('%H:%M:%S'),
                 'Strategy': strategy_name,
-                'Side': signal.type if hasattr(signal, 'type') else signal.get('type', 'UNKNOWN'),
+                'Side': signal_type.upper() if isinstance(signal_type, str) else str(signal_type).upper(),
                 'Entry Price': round(entry_price, 6),
                 'Exit Price': round(exit_price, 6),
                 'P&L %': round(pnl_pct, 4),
                 'P&L $': round(pnl_pct * 10, 2),  # $10 position size
-                'Confidence': round(signal.confidence if hasattr(signal, 'confidence') else signal.get('confidence', 0), 4),
-                'Entry Reason': entry_reason[:100],
-                'Exit Reason': exit_reason[:100],
+                'Confidence': round(confidence, 4),
+                'Entry Reason': entry_reason[:100] if entry_reason else '',
+                'Exit Reason': exit_reason[:100] if exit_reason else '',
                 'Duration (min)': round(duration_minutes, 2),
             }
             
