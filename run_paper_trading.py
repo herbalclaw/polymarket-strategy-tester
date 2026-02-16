@@ -117,10 +117,9 @@ class PaperTrader:
         # Wait 5 minutes
         await asyncio.sleep(0.1)  # Instant for simulation
         
-        # Get exit fill
-        exit_side = 'down' if signal.signal == 'up' else 'up'
+        # Get exit fill (same side as entry - sell what you bought)
         exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
-            side=exit_side,
+            side=signal.signal,
             size_dollars=5.0
         )
         
@@ -132,10 +131,10 @@ class PaperTrader:
         logger.info(f"Exit: {exit_price:.4f} (slippage: {exit_slippage} bps)")
         
         # Calculate P&L
-        if signal.signal == "up":
-            pnl_pct = (exit_price - entry_price) / entry_price * 100
-        else:
-            pnl_pct = (entry_price - exit_price) / entry_price * 100
+        # For prediction markets: P&L = (exit - entry) / entry for both sides
+        # UP: profit if exit > entry (probability increased)
+        # DOWN: profit if exit > entry (probability increased)
+        pnl_pct = (exit_price - entry_price) / entry_price * 100
         
         return {
             'signal': signal,
