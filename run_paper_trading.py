@@ -103,28 +103,40 @@ class PaperTrader:
                 logger.error(f"Strategy {strategy.name} error: {e}")
         return signals
     
-    def calculate_binary_pnl(self, entry_price: float, exit_price: float, side: str) -> Tuple[float, float]:
+    def calculate_early_exit_pnl(self, entry_price: float, exit_price: float, side: str) -> Tuple[float, float]:
         """
-        Calculate P&L for binary prediction market.
-        
-        For binary markets:
-        - You buy a token at price P (0.01 to 0.99)
-        - If you win: token settles to $1.00, profit = (1 - P)
-        - If you lose: token settles to $0.00, loss = -P
-        - If you exit early at price X: P&L = (X - P) / P * 100%
-        
-        Returns: (pnl_amount, pnl_pct)
+        Calculate P&L for early exit (selling before expiry).
+        P&L = (exit_price - entry_price)
         """
-        if side == 'up':
-            # UP token: value goes to 1.0 if BTC up, 0.0 if BTC down
-            pnl_amount = exit_price - entry_price
-        else:  # side == 'down'
-            # DOWN token: value goes to 1.0 if BTC down, 0.0 if BTC up
-            pnl_amount = exit_price - entry_price
+        pnl_amount = exit_price - entry_price
+        pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
+        return pnl_amount, pnl_pct
+    
+    def calculate_expiry_settlement(self, entry_price: float, side: str, won: bool) -> Tuple[float, float]:
+        """
+        Calculate P&L for holding to expiry.
+        
+        Args:
+            entry_price: Price paid for token
+            side: 'up' or 'down'
+            won: True if prediction was correct
+        
+        Returns:
+            (pnl_amount, pnl_pct)
+        """
+        if won:
+            # Winner: token settles to $1.00
+            # Profit = $1.00 - entry_price
+            exit_price = 1.0
+            pnl_amount = 1.0 - entry_price
+        else:
+            # Loser: token settles to $0.00
+            # Loss = -entry_price
+            exit_price = 0.0
+            pnl_amount = -entry_price
         
         pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
-        
-        return pnl_amount, pnl_pct
+        return exit_price, pnl_amount, pnl_pct
     
     async def execute_entry(self, signal: Signal) -> Optional[Dict]:
         """Open a new position."""
@@ -150,19 +162,21 @@ class PaperTrader:
             return None
         
         market_window = self.get_current_market_window()
+        strike_price = self.feed.get_strike_price()
         
-        logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window}")
+        logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window} | Strike: {strike_price}")
         
         return {
             'signal': signal,
             'entry_price': entry_price,
             'entry_slippage_bps': entry_slippage,
             'market_window': market_window,
+            'strike_price': strike_price,
             'side': signal.signal,
         }
     
-    async def execute_exit(self, position: Dict) -> Optional[Dict]:
-        """Close an existing position."""
+    async def execute_early_exit(self, position: Dict) -> Optional[Dict]:
+        """Close position early at market price."""
         side = position['side']
         entry_price = position['entry_price']
         
@@ -177,14 +191,70 @@ class PaperTrader:
             exit_price = entry_price
             exit_slippage = 0
         
-        # Calculate P&L
-        pnl_amount, pnl_pct = self.calculate_binary_pnl(entry_price, exit_price, side)
+        # Calculate P&L for early exit
+        pnl_amount, pnl_pct = self.calculate_early_exit_pnl(entry_price, exit_price, side)
         
         return {
             'exit_price': exit_price,
             'exit_slippage_bps': exit_slippage,
             'pnl_amount': pnl_amount,
             'pnl_pct': pnl_pct,
+            'settled': False,
+        }
+    
+    def check_expiry_settlement(self, position: Dict) -> Optional[Dict]:
+        """
+        Check if position has reached expiry and settle it.
+        
+        Returns:
+            Settlement dict if settled, None if not yet
+        """
+        market_window = position['market_window']
+        current_window = self.get_current_market_window()
+        
+        # Window hasn't closed yet
+        if current_window <= market_window:
+            return None
+        
+        # Window closed - get settlement price
+        settlement_price = self.feed.get_settlement_price(market_window)
+        if settlement_price is None:
+            return None
+        
+        strike_price = position['strike_price']
+        entry_price = position['entry_price']
+        side = position['side']
+        
+        # Determine winner
+        # UP wins if settlement > strike
+        # DOWN wins if settlement < strike
+        # Push (exact match) = both lose (rare)
+        up_wins = settlement_price > strike_price
+        down_wins = settlement_price < strike_price
+        is_push = settlement_price == strike_price
+        
+        if is_push:
+            # Push - both sides lose (edge case)
+            won = False
+            result = "PUSH"
+        elif side == 'up':
+            won = up_wins
+            result = "WIN" if won else "LOSE"
+        else:  # side == 'down'
+            won = down_wins
+            result = "WIN" if won else "LOSE"
+        
+        # Calculate settlement P&L
+        exit_price, pnl_amount, pnl_pct = self.calculate_expiry_settlement(entry_price, side, won)
+        
+        return {
+            'exit_price': exit_price,
+            'pnl_amount': pnl_amount,
+            'pnl_pct': pnl_pct,
+            'settled': True,
+            'result': result,
+            'settlement_price': settlement_price,
+            'strike_price': strike_price,
         }
     
     async def run(self):
@@ -196,7 +266,7 @@ class PaperTrader:
         logger.info("=" * 70)
         logger.info(f"Strategies: {len(self.strategies)}")
         logger.info("Capital: $100 per strategy, $5 per trade")
-        logger.info("Exit: Anytime (not held to settlement)")
+        logger.info("Settlement: Early exit OR hold to expiry ($1.00/$0.00)")
         logger.info("=" * 70)
         
         while self.running:
@@ -222,42 +292,59 @@ class PaperTrader:
                     await asyncio.sleep(5)
                     continue
                 
-                # Check for exit signals on open positions
+                # Process open positions - check for expiry settlement first
                 for strategy_name, position in list(self.open_positions.items()):
-                    # Check if strategy wants to exit
-                    strategy_obj = next((s for s in self.strategies if s.name == strategy_name), None)
-                    if strategy_obj:
-                        try:
-                            # For now, use simple time-based exit (5 min max hold)
-                            # In future, strategies can generate exit signals
-                            entry_time = position.get('entry_time', current_time)
-                            hold_time = (current_time - entry_time).total_seconds()
+                    try:
+                        # First check if window expired (settlement)
+                        settlement = self.check_expiry_settlement(position)
+                        
+                        if settlement:
+                            # Window closed - settle at expiry
+                            del self.open_positions[strategy_name]
+                            self.trades_executed += 1
                             
-                            # Exit after 5 minutes or if price moved significantly
-                            entry_price = position['entry_price']
-                            current_price = market_data.price
-                            price_change_pct = abs(current_price - entry_price) / entry_price * 100
+                            # Record close
+                            self.reporter.record_trade_close(
+                                trade_id=position['trade_id'],
+                                exit_price=settlement['exit_price'],
+                                pnl_pct=settlement['pnl_pct'],
+                                exit_reason=f"expiry_{settlement['result'].lower()}",
+                                duration_minutes=5.0
+                            )
                             
-                            should_exit = hold_time >= 300 or price_change_pct >= 10
-                            
-                            if should_exit:
-                                exit_result = await self.execute_exit(position)
-                                if exit_result:
-                                    # Record close
-                                    self.reporter.record_trade_close(
-                                        trade_id=position['trade_id'],
-                                        exit_price=exit_result['exit_price'],
-                                        pnl_pct=exit_result['pnl_pct'],
-                                        exit_reason='time_exit' if hold_time >= 300 else 'profit_taking',
-                                        duration_minutes=hold_time / 60
-                                    )
-                                    
-                                    del self.open_positions[strategy_name]
-                                    self.trades_executed += 1
-                                    
-                                    logger.info(f"🔒 Trade #{position['trade_id']} closed | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
-                        except Exception as e:
-                            logger.error(f"Error checking exit for {strategy_name}: {e}")
+                            logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.1f}%)")
+                            continue
+                        
+                        # No expiry yet - check for early exit conditions
+                        entry_time = position.get('entry_time', current_time)
+                        hold_time = (current_time - entry_time).total_seconds()
+                        
+                        # Exit after 5 minutes wall time OR if price moved significantly
+                        entry_price = position['entry_price']
+                        current_price = market_data.price
+                        price_change_pct = abs(current_price - entry_price) / entry_price * 100
+                        
+                        should_exit_early = hold_time >= 300 or price_change_pct >= 10
+                        
+                        if should_exit_early:
+                            exit_result = await self.execute_early_exit(position)
+                            if exit_result:
+                                del self.open_positions[strategy_name]
+                                self.trades_executed += 1
+                                
+                                # Record close
+                                self.reporter.record_trade_close(
+                                    trade_id=position['trade_id'],
+                                    exit_price=exit_result['exit_price'],
+                                    pnl_pct=exit_result['pnl_pct'],
+                                    exit_reason='early_exit',
+                                    duration_minutes=hold_time / 60
+                                )
+                                
+                                logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
+                                
+                    except Exception as e:
+                        logger.error(f"Error processing position {strategy_name}: {e}")
                 
                 # Get entry signals
                 signals = self.evaluate_strategies(market_data)
@@ -286,6 +373,7 @@ class PaperTrader:
                         'trade_id': trade_id,
                         'entry_time': current_time,
                         'market_window': result['market_window'],
+                        'strike_price': result['strike_price'],
                         'entry_price': result['entry_price'],
                         'side': result['side'],
                     }
