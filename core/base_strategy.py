@@ -37,6 +37,9 @@ class MarketData:
     # Multi-exchange data
     exchange_prices: Dict[str, Dict] = None
     
+    # Order book data
+    order_book: Dict[str, Any] = None
+    
     # Sentiment data
     sentiment: str = "neutral"
     sentiment_confidence: float = 0.5
@@ -44,6 +47,8 @@ class MarketData:
     def __post_init__(self):
         if self.exchange_prices is None:
             self.exchange_prices = {}
+        if self.order_book is None:
+            self.order_book = {}
 
 
 class BaseStrategy(ABC):

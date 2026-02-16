@@ -96,6 +96,26 @@ class MultiExchangeFeed:
                 spread = 0
             
             import time
+            
+            # Build order book from exchange data
+            order_book = {}
+            total_bid_depth = 0
+            total_ask_depth = 0
+            
+            for ex_name, ex_data in exchange_data.items():
+                if 'bid' in ex_data and 'ask' in ex_data:
+                    total_bid_depth += ex_data.get('bid_depth', 0)
+                    total_ask_depth += ex_data.get('ask_depth', 0)
+            
+            if exchange_data:
+                first_ex = list(exchange_data.values())[0]
+                order_book = {
+                    'best_bid': first_ex.get('bid', mid * 0.999),
+                    'best_ask': first_ex.get('ask', mid * 1.001),
+                    'bid_depth_5pct': total_bid_depth,
+                    'ask_depth_5pct': total_ask_depth,
+                }
+            
             return MarketData(
                 timestamp=time.time(),
                 asset='BTC',
@@ -107,6 +127,7 @@ class MultiExchangeFeed:
                 spread_bps=spread,
                 volume_24h=0,
                 exchange_prices=exchange_data,
+                order_book=order_book,
                 sentiment='neutral',
                 sentiment_confidence=0.5
             )
