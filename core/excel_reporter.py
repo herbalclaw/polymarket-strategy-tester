@@ -130,7 +130,8 @@ class ExcelReporter:
             return open_record
     
     def record_trade_close(self, trade_id: int, exit_price: float, pnl_pct: float,
-                          exit_reason: str, duration_minutes: float) -> Optional[Dict]:
+                          exit_reason: str, duration_minutes: float,
+                          pnl_amount: Optional[float] = None) -> Optional[Dict]:
         """Record a trade close and update capital."""
         with self.lock:
             # Find the open trade
@@ -146,9 +147,15 @@ class ExcelReporter:
                 return None
             
             strategy_name = open_trade['Strategy']
+            entry_price = open_trade['Entry Price']
             
-            # Calculate P&L in dollars based on trade size
-            pnl_dollars = (pnl_pct / 100) * self.trade_size
+            # Calculate P&L in dollars
+            # If pnl_amount provided, use it (for binary markets)
+            # Otherwise calculate from percentage
+            if pnl_amount is not None:
+                pnl_dollars = pnl_amount
+            else:
+                pnl_dollars = (pnl_pct / 100) * self.trade_size
             
             # Update strategy capital
             old_capital = self.strategy_capital.get(strategy_name, self.initial_capital)

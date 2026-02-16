@@ -355,7 +355,8 @@ class PaperTrader:
                                 exit_price=settlement['exit_price'],
                                 pnl_pct=settlement['pnl_pct'],
                                 exit_reason=f"expiry_{settlement['result'].lower()}",
-                                duration_minutes=5.0
+                                duration_minutes=5.0,
+                                pnl_amount=settlement['pnl_amount']
                             )
                             
                             logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.1f}%)")
@@ -384,7 +385,8 @@ class PaperTrader:
                                     exit_price=exit_result['exit_price'],
                                     pnl_pct=exit_result['pnl_pct'],
                                     exit_reason='early_exit',
-                                    duration_minutes=hold_time / 60
+                                    duration_minutes=hold_time / 60,
+                                    pnl_amount=exit_result['pnl_amount']
                                 )
                                 
                                 logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
