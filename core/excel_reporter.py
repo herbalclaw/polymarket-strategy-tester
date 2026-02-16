@@ -15,6 +15,7 @@ class ExcelReporter:
         self.trades_data: Dict[str, List[Dict]] = {}
         self.performance_data: Dict[str, Dict] = {}
         self.closed_trades: List[Dict] = []
+        self.open_trades: List[Dict] = []  # Track open trades
         self.lock = threading.Lock()
         
         # Ensure file exists
@@ -28,40 +29,96 @@ class ExcelReporter:
                 writer, sheet_name='Summary', index=False
             )
     
-    def record_trade(self, strategy_name: str, signal, entry_price: float, 
-                     exit_price: float, pnl_pct: float, entry_reason: str,
-                     exit_reason: str, duration_minutes: float):
-        """Record a completed trade and immediately update Excel."""
+    def record_trade_open(self, strategy_name: str, signal, entry_price: float,
+                          entry_reason: str) -> Dict:
+        """Record a trade open and immediately update Excel."""
         with self.lock:
             signal_type = getattr(signal, 'signal', None) or signal.get('type', 'UNKNOWN')
             confidence = getattr(signal, 'confidence', 0) or signal.get('confidence', 0)
             
-            trade_record = {
-                'Trade #': len(self.closed_trades) + 1,
+            open_record = {
+                'Trade #': len(self.closed_trades) + len(self.open_trades) + 1,
                 'Date': datetime.now().strftime('%Y-%m-%d'),
                 'Time': datetime.now().strftime('%H:%M:%S'),
                 'Strategy': strategy_name,
                 'Side': signal_type.upper() if isinstance(signal_type, str) else str(signal_type).upper(),
                 'Entry Price': round(entry_price, 6),
-                'Exit Price': round(exit_price, 6),
-                'P&L %': round(pnl_pct, 4),
-                'P&L $': round(pnl_pct * 10, 2),
+                'Exit Price': None,
+                'Status': 'OPEN',
+                'P&L %': 0.0,
+                'P&L $': 0.0,
                 'Confidence': round(confidence, 4),
                 'Entry Reason': entry_reason[:100] if entry_reason else '',
+                'Exit Reason': '',
+                'Duration (min)': 0.0,
+            }
+            
+            self.open_trades.append(open_record)
+            
+            if strategy_name not in self.trades_data:
+                self.trades_data[strategy_name] = []
+            self.trades_data[strategy_name].append(open_record)
+            
+            self._write_excel()
+            
+            return open_record
+    
+    def record_trade_close(self, trade_id: int, exit_price: float, pnl_pct: float,
+                          exit_reason: str, duration_minutes: float) -> Dict:
+        """Record a trade close and immediately update Excel."""
+        with self.lock:
+            # Find the open trade
+            open_trade = None
+            open_idx = None
+            for idx, trade in enumerate(self.open_trades):
+                if trade['Trade #'] == trade_id:
+                    open_trade = trade
+                    open_idx = idx
+                    break
+            
+            if open_trade is None:
+                return None
+            
+            # Create closed trade record
+            closed_record = {
+                **open_trade,
+                'Exit Price': round(exit_price, 6),
+                'Status': 'CLOSED',
+                'P&L %': round(pnl_pct, 4),
+                'P&L $': round(pnl_pct * 10, 2),
                 'Exit Reason': exit_reason[:100] if exit_reason else '',
                 'Duration (min)': round(duration_minutes, 2),
             }
             
-            self.closed_trades.append(trade_record)
+            # Remove from open trades
+            self.open_trades.pop(open_idx)
             
-            if strategy_name not in self.trades_data:
-                self.trades_data[strategy_name] = []
-            self.trades_data[strategy_name].append(trade_record)
+            # Add to closed trades
+            self.closed_trades.append(closed_record)
+            
+            # Update in strategy data
+            strategy_name = closed_record['Strategy']
+            if strategy_name in self.trades_data:
+                # Replace the open trade with closed trade
+                for idx, trade in enumerate(self.trades_data[strategy_name]):
+                    if trade['Trade #'] == trade_id:
+                        self.trades_data[strategy_name][idx] = closed_record
+                        break
             
             self._update_performance_metrics(strategy_name)
             self._write_excel()
             
-            return trade_record
+            return closed_record
+
+    def record_trade(self, strategy_name: str, signal, entry_price: float, 
+                     exit_price: float, pnl_pct: float, entry_reason: str,
+                     exit_reason: str, duration_minutes: float):
+        """Legacy method - records a completed trade in one step."""
+        # Record as open then immediately close
+        signal_copy = type('obj', (object,), {'signal': getattr(signal, 'signal', 'UNKNOWN'), 
+                                              'confidence': getattr(signal, 'confidence', 0)})()
+        open_record = self.record_trade_open(strategy_name, signal_copy, entry_price, entry_reason)
+        return self.record_trade_close(open_record['Trade #'], exit_price, pnl_pct, exit_reason, duration_minutes)
     
     def _update_performance_metrics(self, strategy: str):
         """Calculate performance metrics for a strategy."""

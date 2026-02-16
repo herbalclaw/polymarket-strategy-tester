@@ -132,14 +132,78 @@ class PaperTrader:
         logger.info("🚀 PAPER TRADING BOT STARTED")
         logger.info("=" * 70)
         logger.info("Features:")
-        logger.info("  📊 Live Excel updates on EVERY trade")
-        logger.info("  🚀 GitHub auto-push on EVERY trade close")
+        logger.info("  📊 Live Excel updates on EVERY trade OPEN and CLOSE")
+        logger.info("  🚀 GitHub auto-push on EVERY trade event")
         logger.info(f"  🎯 {len(self.strategies)} strategies active")
         logger.info("=" * 70)
+        
+        # Track open positions
+        open_positions = {}  # trade_id -> position info
         
         while self.running:
             try:
                 self.cycle += 1
+                
+                # Check for position exits (5-minute hold)
+                current_time = datetime.now()
+                trades_to_close = []
+                
+                for trade_id, position in list(open_positions.items()):
+                    elapsed = (current_time - position['entry_time']).total_seconds() / 60
+                    
+                    if elapsed >= 5:  # 5 minute hold
+                        trades_to_close.append(trade_id)
+                
+                # Close expired positions
+                for trade_id in trades_to_close:
+                    position = open_positions.pop(trade_id)
+                    
+                    # Simulate exit
+                    entry_price = position['entry_price']
+                    signal = position['signal']
+                    
+                    # Simulate market movement
+                    signal_quality = signal.confidence - 0.6
+                    expected_edge = signal_quality * 0.02
+                    noise = random.gauss(0, 0.005)
+                    
+                    if signal.signal == "up":
+                        exit_price = entry_price * (1 + expected_edge + noise)
+                        pnl_pct = (exit_price - entry_price) / entry_price * 100
+                    else:
+                        exit_price = entry_price * (1 - expected_edge - noise)
+                        pnl_pct = (entry_price - exit_price) / entry_price * 100
+                    
+                    # Record trade close
+                    closed_record = self.reporter.record_trade_close(
+                        trade_id=trade_id,
+                        exit_price=exit_price,
+                        pnl_pct=pnl_pct,
+                        exit_reason='time_exit_5min',
+                        duration_minutes=5.0
+                    )
+                    
+                    self.trades_executed += 1
+                    
+                    logger.info(f"🔒 Trade #{trade_id} CLOSED | P&L: {pnl_pct:+.3f}% | Strategy: {position['strategy']}")
+                    logger.info(f"📝 Excel updated with close")
+                    
+                    # Push to GitHub on close
+                    push_data = {
+                        'trade_id': trade_id,
+                        'pnl_pct': pnl_pct,
+                        'strategy': position['strategy'],
+                        'side': signal.signal.upper(),
+                        'event': 'CLOSE'
+                    }
+                    
+                    push_success = self.pusher.push_on_trade_close(
+                        self.trades_executed,
+                        push_data
+                    )
+                    
+                    if push_success:
+                        logger.info(f"🚀 GitHub push successful for trade #{trade_id} close")
                 
                 # Fetch market data
                 market_data = await self.feed.fetch_data()
@@ -154,51 +218,53 @@ class PaperTrader:
                     logger.info(f"🎯 SIGNAL: {best.signal.upper()} | Confidence: {best.confidence:.1%} | Strategy: {best.strategy}")
                     logger.info(f"   Reason: {best.reason}")
                     
-                    # Execute paper trade
-                    trade_result = await self.simulate_trade_execution(best, market_data)
-                    self.trades_executed += 1
+                    # Execute entry
+                    entry_price = market_data.vwap if market_data.vwap else market_data.price
                     
-                    # Update strategy performance
-                    for strategy in self.strategies:
-                        if strategy.name == best.strategy:
-                            strategy.on_trade_complete(trade_result)
-                            break
+                    if entry_price == 0:
+                        entry_price = 50000
                     
-                    # Record to Excel (immediately writes file)
-                    trade_record = self.reporter.record_trade(
+                    # Record trade open
+                    open_record = self.reporter.record_trade_open(
                         strategy_name=best.strategy,
                         signal=best,
-                        entry_price=trade_result['entry_price'],
-                        exit_price=trade_result['exit_price'],
-                        pnl_pct=trade_result['pnl_pct'],
-                        entry_reason=best.reason,
-                        exit_reason=trade_result['exit_reason'],
-                        duration_minutes=trade_result['duration']
+                        entry_price=entry_price,
+                        entry_reason=best.reason
                     )
                     
-                    logger.info(f"📝 Excel updated | Trade #{self.trades_executed} | P&L: {trade_result['pnl_pct']:+.3f}%")
+                    trade_id = open_record['Trade #']
                     
-                    # Push to GitHub
+                    # Track open position
+                    open_positions[trade_id] = {
+                        'entry_time': current_time,
+                        'entry_price': entry_price,
+                        'signal': best,
+                        'strategy': best.strategy
+                    }
+                    
+                    logger.info(f"🔓 Trade #{trade_id} OPENED | Strategy: {best.strategy} | Price: {entry_price:.2f}")
+                    logger.info(f"📝 Excel updated with open")
+                    
+                    # Push to GitHub on open
                     push_data = {
-                        'pnl_pct': trade_result['pnl_pct'],
+                        'trade_id': trade_id,
                         'strategy': best.strategy,
                         'side': best.signal.upper(),
-                        'confidence': best.confidence
+                        'entry_price': entry_price,
+                        'event': 'OPEN'
                     }
                     
                     push_success = self.pusher.push_on_trade_close(
-                        self.trades_executed,
+                        trade_id,
                         push_data
                     )
                     
                     if push_success:
-                        logger.info(f"🚀 GitHub push successful for trade #{self.trades_executed}")
-                    else:
-                        logger.warning(f"⚠️ GitHub push failed for trade #{self.trades_executed}")
+                        logger.info(f"🚀 GitHub push successful for trade #{trade_id} open")
                 
                 # Status update every 10 cycles
                 if self.cycle % 10 == 0:
-                    logger.info(f"📊 Status: Cycle {self.cycle} | Trades: {self.trades_executed} | Strategies: {len(self.strategies)}")
+                    logger.info(f"📊 Status: Cycle {self.cycle} | Open: {len(open_positions)} | Closed: {self.trades_executed} | Strategies: {len(self.strategies)}")
                 
                 # Wait before next cycle
                 await asyncio.sleep(5)
