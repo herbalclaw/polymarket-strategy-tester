@@ -36,7 +36,7 @@ class PolymarketDataFeed:
     REST_API = "https://clob.polymarket.com"
     GAMMA_API = "https://gamma-api.polymarket.com"
     
-    def __init__(self, data_collector_path: str = "../polymarket-data-collector"):
+    def __init__(self, data_collector_path: str = "/root/.openclaw/workspace/polymarket-data-collector"):
         self.data_collector_path = data_collector_path
         self.db_path = self._get_current_db_path()
         self.conn = None
