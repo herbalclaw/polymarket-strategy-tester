@@ -188,9 +188,21 @@ class PaperTrader:
                     logger.info(f"🔒 Trade #{trade_id} closed | P&L: {result['pnl_pct']:+.3f}%")
                 
                 # Get market data
-                market_data = self.feed.fetch_data()
+                try:
+                    market_data = self.feed.fetch_data()
+                    logger.debug(f"Fetched market data: {market_data}")
+                except Exception as e:
+                    logger.error(f"Error fetching market data: {e}")
+                    market_data = None
+                
                 if not market_data:
-                    logger.warning("No market data")
+                    logger.warning("No market data, skipping cycle")
+                    await asyncio.sleep(5)
+                    continue
+                
+                # Validate market data fields
+                if not hasattr(market_data, 'price') or market_data.price is None:
+                    logger.warning("Invalid market data (no price), skipping")
                     await asyncio.sleep(5)
                     continue
                 
