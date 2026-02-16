@@ -316,12 +316,10 @@ class PolymarketDataFeed:
     
     def get_settlement_price(self, market_window: int) -> Optional[float]:
         """
-        Get BTC price at settlement for a specific window.
+        Get settlement result from Polymarket API.
         
-        NOTE: This currently uses external API which may not be accurate.
-        For true settlement, we need historical BTC price at window close.
-        
-        Returns None to disable automatic expiry settlement until proper data available.
+        Returns the winning outcome price (1.0 for winner, 0.0 for loser)
+        based on Polymarket's official settlement.
         """
         try:
             # Check if window has actually closed
@@ -331,13 +329,50 @@ class PolymarketDataFeed:
             if current_time < window_close:
                 return None  # Window hasn't closed yet
             
-            # TEMPORARY: Disable automatic expiry settlement
-            # We don't have reliable historical BTC price data
-            # Positions should be exited manually or will be marked as stale
+            # Query Polymarket API for settlement result
+            slug = f"btc-updown-5m-{market_window}"
+            resp = self.session.get(
+                f"{self.GAMMA_API}/events",
+                params={"slug": slug},
+                timeout=5
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if not data or len(data) == 0:
+                return None
+            
+            event = data[0]
+            markets = event.get('markets', [])
+            if not markets:
+                return None
+            
+            market = markets[0]
+            
+            # Check if market is closed/settled
+            is_closed = market.get('closed', False)
+            if not is_closed:
+                return None  # Not settled yet
+            
+            # Get outcome prices - shows [1, 0] or [0, 1] for settled markets
+            outcome_prices = market.get('outcomePrices', '[]')
+            import json
+            try:
+                prices = json.loads(outcome_prices)
+                if len(prices) >= 2:
+                    # prices[0] = UP token final price
+                    # prices[1] = DOWN token final price
+                    up_price = float(prices[0])
+                    down_price = float(prices[1])
+                    # Return tuple of (up_price, down_price)
+                    return (up_price, down_price)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
             return None
             
         except Exception as e:
-            print(f"Error getting settlement price: {e}")
+            print(f"Error getting settlement from Polymarket: {e}")
             return None
     
     def get_order_book(self) -> Optional[Dict]:

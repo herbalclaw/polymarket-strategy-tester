@@ -222,7 +222,7 @@ class PaperTrader:
     
     def check_expiry_settlement(self, position: Dict) -> Optional[Dict]:
         """
-        Check if position has reached expiry and settle it.
+        Check if position has reached expiry and settle it using Polymarket's official result.
         
         Returns:
             Settlement dict if settled, None if not yet
@@ -235,63 +235,58 @@ class PaperTrader:
             return None
         
         # EDGE CASE: Window closed but we're more than 1 window behind
-        # This shouldn't happen, but handle it gracefully
         if current_window > market_window + 300:
             logger.warning(f"Position from window {market_window} is stale (current: {current_window})")
-            # Force settlement as loss (conservative)
             entry_price = position['entry_price']
             side = position['side']
-            exit_price, pnl_amount, pnl_pct = self.calculate_expiry_settlement(entry_price, side, won=False)
+            # Force settlement as loss
+            if side == 'up':
+                exit_price = 0.0
+            else:
+                exit_price = 0.0
+            pnl_amount = -entry_price
+            pnl_pct = -100.0
             return {
                 'exit_price': exit_price,
                 'pnl_amount': pnl_amount,
                 'pnl_pct': pnl_pct,
                 'settled': True,
                 'result': 'STALE_LOSS',
-                'settlement_price': None,
-                'strike_price': position['strike_price'],
             }
         
-        # Window closed - get settlement price
-        settlement_price = self.feed.get_settlement_price(market_window)
+        # Window closed - get settlement result from Polymarket
+        settlement_result = self.feed.get_settlement_price(market_window)
         
-        # EDGE CASE: Can't get settlement price, retry next cycle
-        if settlement_price is None:
-            logger.debug(f"Settlement price not available for window {market_window}, retrying...")
+        # Can't get settlement, retry next cycle
+        if settlement_result is None:
+            logger.debug(f"Settlement not available for window {market_window}, retrying...")
             return None
         
-        strike_price = position['strike_price']
+        # settlement_result is (up_price, down_price) tuple from Polymarket
+        up_price, down_price = settlement_result
+        
         entry_price = position['entry_price']
         side = position['side']
         
-        # EDGE CASE: Missing strike price - use settlement as fallback
-        if strike_price is None:
-            logger.warning(f"Missing strike price for position, using settlement price comparison")
-            # Can't determine winner without strike, mark as push (loss)
-            won = False
-            result = "PUSH"
-        else:
-            # Determine winner
-            # UP wins if settlement > strike
-            # DOWN wins if settlement < strike
-            # Push (exact match) = both lose (rare)
-            up_wins = settlement_price > strike_price
-            down_wins = settlement_price < strike_price
-            is_push = abs(settlement_price - strike_price) < 0.01  # Within 1 cent = push
-            
-            if is_push:
-                # Push - both sides lose (edge case)
-                won = False
-                result = "PUSH"
-            elif side == 'up':
-                won = up_wins
-                result = "WIN" if won else "LOSE"
-            else:  # side == 'down'
-                won = down_wins
-                result = "WIN" if won else "LOSE"
+        # Determine winner based on Polymarket's official settlement
+        # up_price = 1.0 means UP won, 0.0 means UP lost
+        # down_price = 1.0 means DOWN won, 0.0 means DOWN lost
+        if side == 'up':
+            won = (up_price >= 0.99)  # Allow small tolerance
+            exit_price = up_price
+        else:  # side == 'down'
+            won = (down_price >= 0.99)
+            exit_price = down_price
+        
+        result = "WIN" if won else "LOSE"
         
         # Calculate settlement P&L
-        exit_price, pnl_amount, pnl_pct = self.calculate_expiry_settlement(entry_price, side, won)
+        if won:
+            pnl_amount = 1.0 - entry_price  # Paid entry, get $1.00
+        else:
+            pnl_amount = -entry_price  # Paid entry, get $0.00
+        
+        pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
         
         return {
             'exit_price': exit_price,
@@ -299,8 +294,6 @@ class PaperTrader:
             'pnl_pct': pnl_pct,
             'settled': True,
             'result': result,
-            'settlement_price': settlement_price,
-            'strike_price': strike_price,
         }
     
     async def run(self):
