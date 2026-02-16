@@ -147,22 +147,40 @@ class PaperTrader:
             logger.debug(f"{strategy_name} already has open position, skipping entry")
             return None
         
+        # EDGE CASE: Don't enter in last 15 seconds of window (too close to expiry)
+        time_in_window = time.time() % 300
+        if time_in_window > 285:
+            logger.debug(f"Too close to expiry ({time_in_window:.0f}s), skipping entry")
+            return None
+        
         # Get entry fill from Polymarket
         entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
             size_dollars=5.0
         )
         
-        if entry_price == 0 or entry_price == 0.5:
-            logger.warning(f"No fill for entry: {entry_status}")
+        # EDGE CASE: Invalid price
+        if entry_price <= 0.01 or entry_price >= 0.99 or entry_price == 0.5:
+            logger.warning(f"Invalid entry price: {entry_price}, skipping")
             return None
         
+        # EDGE CASE: High slippage indicates low liquidity
         if entry_status == "high_slippage":
             logger.warning(f"High slippage: {entry_slippage} bps, skipping")
             return None
         
+        # EDGE CASE: No fill
+        if entry_status == "no_fill":
+            logger.warning(f"No fill available, skipping")
+            return None
+        
         market_window = self.get_current_market_window()
         strike_price = self.feed.get_strike_price()
+        
+        # EDGE CASE: No strike price available
+        if strike_price is None:
+            logger.warning(f"No strike price available, skipping")
+            return None
         
         logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window} | Strike: {strike_price}")
         
@@ -216,33 +234,61 @@ class PaperTrader:
         if current_window <= market_window:
             return None
         
+        # EDGE CASE: Window closed but we're more than 1 window behind
+        # This shouldn't happen, but handle it gracefully
+        if current_window > market_window + 300:
+            logger.warning(f"Position from window {market_window} is stale (current: {current_window})")
+            # Force settlement as loss (conservative)
+            entry_price = position['entry_price']
+            side = position['side']
+            exit_price, pnl_amount, pnl_pct = self.calculate_expiry_settlement(entry_price, side, won=False)
+            return {
+                'exit_price': exit_price,
+                'pnl_amount': pnl_amount,
+                'pnl_pct': pnl_pct,
+                'settled': True,
+                'result': 'STALE_LOSS',
+                'settlement_price': None,
+                'strike_price': position['strike_price'],
+            }
+        
         # Window closed - get settlement price
         settlement_price = self.feed.get_settlement_price(market_window)
+        
+        # EDGE CASE: Can't get settlement price, retry next cycle
         if settlement_price is None:
+            logger.debug(f"Settlement price not available for window {market_window}, retrying...")
             return None
         
         strike_price = position['strike_price']
         entry_price = position['entry_price']
         side = position['side']
         
-        # Determine winner
-        # UP wins if settlement > strike
-        # DOWN wins if settlement < strike
-        # Push (exact match) = both lose (rare)
-        up_wins = settlement_price > strike_price
-        down_wins = settlement_price < strike_price
-        is_push = settlement_price == strike_price
-        
-        if is_push:
-            # Push - both sides lose (edge case)
+        # EDGE CASE: Missing strike price - use settlement as fallback
+        if strike_price is None:
+            logger.warning(f"Missing strike price for position, using settlement price comparison")
+            # Can't determine winner without strike, mark as push (loss)
             won = False
             result = "PUSH"
-        elif side == 'up':
-            won = up_wins
-            result = "WIN" if won else "LOSE"
-        else:  # side == 'down'
-            won = down_wins
-            result = "WIN" if won else "LOSE"
+        else:
+            # Determine winner
+            # UP wins if settlement > strike
+            # DOWN wins if settlement < strike
+            # Push (exact match) = both lose (rare)
+            up_wins = settlement_price > strike_price
+            down_wins = settlement_price < strike_price
+            is_push = abs(settlement_price - strike_price) < 0.01  # Within 1 cent = push
+            
+            if is_push:
+                # Push - both sides lose (edge case)
+                won = False
+                result = "PUSH"
+            elif side == 'up':
+                won = up_wins
+                result = "WIN" if won else "LOSE"
+            else:  # side == 'down'
+                won = down_wins
+                result = "WIN" if won else "LOSE"
         
         # Calculate settlement P&L
         exit_price, pnl_amount, pnl_pct = self.calculate_expiry_settlement(entry_price, side, won)
