@@ -103,29 +103,42 @@ class PaperTrader:
         
         return signals
     
-    async def simulate_trade_execution(self, signal: Signal, market_data) -> Dict:
-        """Simulate a paper trade using real Polymarket fills."""
-        # Get entry fill from Polymarket order book
-        entry_price, entry_slippage = self.feed.simulate_fill(
+    async def simulate_trade_execution(self, signal: Signal, market_data) -> Optional[Dict]:
+        """Simulate a paper trade using real Polymarket order book walking."""
+        # Get entry fill by walking Polymarket order book
+        entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
-            size=5.0  # $5 trade size
+            size_dollars=5.0  # $5 trade size
         )
         
-        if entry_price == 0:
-            logger.warning("Could not get Polymarket price, skipping trade")
+        if entry_price == 0 or entry_price == 0.5:
+            logger.warning(f"Could not get Polymarket fill for entry, status: {entry_status}")
             return None
+        
+        if entry_status == "high_slippage":
+            logger.warning(f"High slippage on entry: {entry_slippage} bps, skipping trade")
+            return None
+        
+        logger.info(f"Entry fill: {entry_price:.4f} (slippage: {entry_slippage} bps, status: {entry_status})")
         
         # Simulate 5-minute hold
         await asyncio.sleep(0.1)
         
-        # Get exit fill from Polymarket (real market movement)
-        exit_price, exit_slippage = self.feed.simulate_fill(
-            side='down' if signal.signal == 'up' else 'up',  # Opposite side to close
-            size=5.0
+        # Get exit fill by walking order book (opposite side)
+        exit_side = 'down' if signal.signal == 'up' else 'up'
+        exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
+            side=exit_side,
+            size_dollars=5.0
         )
         
-        if exit_price == 0:
-            exit_price = entry_price  # Flat if no data
+        if exit_price == 0 or exit_price == 0.5:
+            logger.warning(f"Could not get Polymarket fill for exit, status: {exit_status}")
+            # Use entry price as fallback (flat trade)
+            exit_price = entry_price
+            exit_slippage = 0
+            exit_status = "fallback"
+        
+        logger.info(f"Exit fill: {exit_price:.4f} (slippage: {exit_slippage} bps, status: {exit_status})")
         
         # Calculate P&L
         if signal.signal == "up":
@@ -139,6 +152,8 @@ class PaperTrader:
             'exit_price': exit_price,
             'entry_slippage_bps': entry_slippage,
             'exit_slippage_bps': exit_slippage,
+            'entry_status': entry_status,
+            'exit_status': exit_status,
             'pnl_pct': pnl_pct,
             'pnl_amount': pnl_pct * 5 / 100,  # $5 position
             'exit_reason': 'time_exit_5min',
