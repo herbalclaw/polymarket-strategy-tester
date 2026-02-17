@@ -44,11 +44,16 @@ class MarketData:
     sentiment: str = "neutral"
     sentiment_confidence: float = 0.5
     
+    # Historical price data for strategy calculations
+    historical_prices: List[Dict] = None
+    
     def __post_init__(self):
         if self.exchange_prices is None:
             self.exchange_prices = {}
         if self.order_book is None:
             self.order_book = {}
+        if self.historical_prices is None:
+            self.historical_prices = []
 
 
 class BaseStrategy(ABC):

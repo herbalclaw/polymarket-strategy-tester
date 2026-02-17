@@ -539,11 +539,47 @@ class PolymarketDataFeed:
             'vwap': price.vwap
         }
     
+    def get_historical_prices(self, lookback_periods: int = 100) -> List[Dict]:
+        """Fetch historical price data from database for strategy calculations."""
+        if not self._ensure_connection():
+            return []
+        
+        try:
+            cursor = self.conn.cursor()
+            # Get recent price updates, scaled back to normal prices
+            cursor.execute('''
+                SELECT timestamp_ms, market_ts, side, bid, ask, mid, spread_bps 
+                FROM price_updates 
+                ORDER BY timestamp_ms DESC 
+                LIMIT ?
+            ''', (lookback_periods,))
+            
+            rows = cursor.fetchall()
+            prices = []
+            for row in reversed(rows):  # Reverse to get chronological order
+                timestamp_ms, market_ts, side, bid, ask, mid, spread_bps = row
+                prices.append({
+                    'timestamp': timestamp_ms / 1000,
+                    'market_window': market_ts,
+                    'side': side,
+                    'bid': bid / 1_000_000,  # Scale from micro to normal
+                    'ask': ask / 1_000_000,
+                    'mid': mid / 1_000_000,
+                    'spread_bps': spread_bps
+                })
+            return prices
+        except Exception as e:
+            print(f"Error fetching historical prices: {e}")
+            return []
+    
     def fetch_data(self) -> Optional[MarketData]:
-        """Fetch market data for strategies."""
+        """Fetch market data for strategies with historical context."""
         price = self.get_latest_price()
         if not price:
             return None
+        
+        # Get historical data for strategies that need it
+        historical_prices = self.get_historical_prices(lookback_periods=100)
         
         return MarketData(
             timestamp=time.time(),
@@ -558,5 +594,6 @@ class PolymarketDataFeed:
             exchange_prices={},
             order_book=self.get_order_book(),
             sentiment='neutral',
-            sentiment_confidence=0.5
+            sentiment_confidence=0.5,
+            historical_prices=historical_prices  # Add historical data
         )
