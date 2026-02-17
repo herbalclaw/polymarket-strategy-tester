@@ -88,7 +88,11 @@ class PaperTrader:
     def get_current_market_window(self) -> int:
         """Get current 5-minute market window timestamp."""
         return (int(time.time()) // 300) * 300
-    
+
+    def get_next_market_window(self) -> int:
+        """Get next 5-minute market window timestamp - like streak bot."""
+        return self.get_current_market_window() + 300
+
     def evaluate_strategies(self, market_data) -> List[Signal]:
         """Get signals from active (non-bankrupt) strategies."""
         signals = []
@@ -174,7 +178,7 @@ class PaperTrader:
             logger.warning(f"No fill available, skipping")
             return None
         
-        market_window = self.get_current_market_window()
+        market_window = self.get_next_market_window()
         strike_price = self.feed.get_strike_price()
         
         # EDGE CASE: No strike price available
@@ -223,9 +227,7 @@ class PaperTrader:
     def check_expiry_settlement(self, position: Dict) -> Optional[Dict]:
         """
         Check if position has reached expiry and settle it using Polymarket's official result.
-        
-        Returns:
-            Settlement dict if settled, None if not yet
+        Uses streak bot logic: checks umaResolutionStatus for reliable settlement detection.
         """
         market_window = position['market_window']
         current_window = self.get_current_market_window()
@@ -240,10 +242,7 @@ class PaperTrader:
             entry_price = position['entry_price']
             side = position['side']
             # Force settlement as loss
-            if side == 'up':
-                exit_price = 0.0
-            else:
-                exit_price = 0.0
+            exit_price = 0.0
             pnl_amount = -entry_price
             pnl_pct = -100.0
             return {
@@ -254,29 +253,28 @@ class PaperTrader:
                 'result': 'STALE_LOSS',
             }
         
-        # Window closed - get settlement result from Polymarket
-        settlement_result = self.feed.get_settlement_price(market_window)
+        # Window closed - get settlement result from Polymarket using streak bot logic
+        settlement_result = self.feed.get_settlement_result(market_window)
         
         # Can't get settlement, retry next cycle
         if settlement_result is None:
             logger.debug(f"Settlement not available for window {market_window}, retrying...")
             return None
         
-        # settlement_result is (up_price, down_price) tuple from Polymarket
-        up_price, down_price = settlement_result
+        outcome, (up_price, down_price) = settlement_result
+        
+        # Market closed but not resolved yet (umaResolutionStatus pending)
+        if outcome == 'pending':
+            logger.debug(f"Market {market_window} closed but not resolved yet, waiting...")
+            return None
         
         entry_price = position['entry_price']
         side = position['side']
         
         # Determine winner based on Polymarket's official settlement
-        # up_price = 1.0 means UP won, 0.0 means UP lost
-        # down_price = 1.0 means DOWN won, 0.0 means DOWN lost
-        if side == 'up':
-            won = (up_price >= 0.99)  # Allow small tolerance
-            exit_price = up_price
-        else:  # side == 'down'
-            won = (down_price >= 0.99)
-            exit_price = down_price
+        # Using streak bot logic: outcome is 'up' or 'down'
+        won = (side == outcome)
+        exit_price = up_price if side == 'up' else down_price
         
         result = "WIN" if won else "LOSE"
         

@@ -446,12 +446,13 @@ class PolymarketDataFeed:
             print(f"Error getting external BTC price: {e}")
             return None
     
-    def get_settlement_price(self, market_window: int) -> Optional[float]:
+    def get_settlement_result(self, market_window: int) -> Optional[Tuple[str, Tuple[float, float]]]:
         """
-        Get settlement result from Polymarket API.
+        Get settlement result from Polymarket API - matching streak bot logic.
         
-        Returns the winning outcome price (1.0 for winner, 0.0 for loser)
-        based on Polymarket's official settlement.
+        Returns:
+            Tuple of (outcome, (up_price, down_price)) where outcome is "up", "down", or None
+            Returns None if market not settled yet.
         """
         try:
             # Check if window has actually closed
@@ -481,31 +482,46 @@ class PolymarketDataFeed:
             
             market = markets[0]
             
-            # Check if market is closed/settled
+            # Check if market is closed/settled - USING STREAK BOT LOGIC
             is_closed = market.get('closed', False)
-            if not is_closed:
-                return None  # Not settled yet
+            uma_status = market.get('umaResolutionStatus', '')
+            is_resolved = uma_status == 'resolved'
             
-            # Get outcome prices - shows [1, 0] or [0, 1] for settled markets
+            # Get outcome prices
             outcome_prices = market.get('outcomePrices', '[]')
             import json
             try:
                 prices = json.loads(outcome_prices)
                 if len(prices) >= 2:
-                    # prices[0] = UP token final price
-                    # prices[1] = DOWN token final price
                     up_price = float(prices[0])
                     down_price = float(prices[1])
-                    # Return tuple of (up_price, down_price)
-                    return (up_price, down_price)
+                    
+                    # Determine outcome using streak bot logic
+                    if is_closed and (is_resolved or up_price > 0.99 or down_price > 0.99):
+                        if up_price > 0.99:
+                            return ('up', (up_price, down_price))
+                        elif down_price > 0.99:
+                            return ('down', (up_price, down_price))
             except (json.JSONDecodeError, ValueError):
                 pass
             
-            return None
+            # Market closed but not resolved yet
+            if is_closed:
+                return ('pending', (0.0, 0.0))  # Still waiting for resolution
+            
+            return None  # Not settled yet
             
         except Exception as e:
             print(f"Error getting settlement from Polymarket: {e}")
             return None
+    
+    # Backwards compatibility - old method returns just prices
+    def get_settlement_price(self, market_window: int) -> Optional[Tuple[float, float]]:
+        """Legacy method - returns (up_price, down_price) tuple."""
+        result = self.get_settlement_result(market_window)
+        if result and result[0] in ('up', 'down'):
+            return result[1]
+        return None
     
     def get_order_book(self) -> Optional[Dict]:
         """Get current order book snapshot."""
