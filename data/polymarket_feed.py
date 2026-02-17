@@ -250,9 +250,40 @@ class PolymarketDataFeed:
         return False
     
     def get_latest_price(self) -> Optional[PolymarketPrice]:
-        """Get latest price from Polymarket CLOB API."""
+        """Get latest price from database (CLOB API returns fake 0.01/0.99 prices)."""
+        # Try to read from database first
+        if self._ensure_connection():
+            try:
+                cursor = self.conn.cursor()
+                # Get latest price update from database
+                cursor.execute('''
+                    SELECT timestamp_ms, bid, ask, mid, spread_bps, bid_depth, ask_depth
+                    FROM price_updates
+                    ORDER BY timestamp_ms DESC
+                    LIMIT 1
+                ''')
+                row = cursor.fetchone()
+                if row:
+                    ts_ms, bid, ask, mid, spread_bps, bid_depth, ask_depth = row
+                    # Scale from integer (1M = 1.0)
+                    price = PolymarketPrice(
+                        timestamp_ms=ts_ms,
+                        bid=bid / 1_000_000,
+                        ask=ask / 1_000_000,
+                        mid=mid / 1_000_000,
+                        vwap=mid / 1_000_000,
+                        spread_bps=spread_bps,
+                        bid_depth=bid_depth or 0,
+                        ask_depth=ask_depth or 0
+                    )
+                    self.last_price = price
+                    return price
+            except Exception as e:
+                print(f"Error reading from database: {e}")
+        
+        # Fallback to CLOB API (but it returns fake prices)
         if not self._get_token_ids():
-            return None
+            return self.last_price
         
         try:
             # Fetch order book for UP token
@@ -268,10 +299,16 @@ class PolymarketDataFeed:
             asks = book.get('asks', [])
             
             if not bids or not asks:
-                return None
+                return self.last_price
             
             best_bid = float(bids[0]['price'])
             best_ask = float(asks[0]['price'])
+            
+            # Validate prices are realistic (not fake 0.01/0.99)
+            if best_bid < 0.05 or best_ask > 0.95:
+                print(f"Warning: CLOB API returned fake prices {best_bid}/{best_ask}, using last known price")
+                return self.last_price
+            
             mid = (best_bid + best_ask) / 2
             spread_bps = int((best_ask - best_bid) / mid * 10000)
             
@@ -284,7 +321,7 @@ class PolymarketDataFeed:
                 bid=best_bid,
                 ask=best_ask,
                 mid=mid,
-                vwap=mid,  # Use mid as VWAP for now
+                vwap=mid,
                 spread_bps=spread_bps,
                 bid_depth=bid_depth,
                 ask_depth=ask_depth
