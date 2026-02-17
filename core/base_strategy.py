@@ -44,8 +44,11 @@ class MarketData:
     sentiment: str = "neutral"
     sentiment_confidence: float = 0.5
     
-    # Historical price data for strategy calculations
+    # Historical price data for strategy calculations (current window only)
     historical_prices: List[Dict] = None
+    
+    # Current market window timestamp (for 5-min markets)
+    current_window: int = 0
     
     def __post_init__(self):
         if self.exchange_prices is None:

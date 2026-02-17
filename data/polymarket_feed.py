@@ -539,20 +539,24 @@ class PolymarketDataFeed:
             'vwap': price.vwap
         }
     
-    def get_historical_prices(self, lookback_periods: int = 100) -> List[Dict]:
-        """Fetch historical price data from database for strategy calculations."""
+    def get_historical_prices(self, current_window: int, lookback_periods: int = 100) -> List[Dict]:
+        """
+        Fetch historical price data from database for the CURRENT window only.
+        This ensures strategies get fresh data for each 5-minute window.
+        """
         if not self._ensure_connection():
             return []
         
         try:
             cursor = self.conn.cursor()
-            # Get recent price updates, scaled back to normal prices
+            # Get price updates ONLY for the current window
             cursor.execute('''
                 SELECT timestamp_ms, market_ts, side, bid, ask, mid, spread_bps 
                 FROM price_updates 
+                WHERE market_ts = ?
                 ORDER BY timestamp_ms DESC 
                 LIMIT ?
-            ''', (lookback_periods,))
+            ''', (current_window, lookback_periods))
             
             rows = cursor.fetchall()
             prices = []
@@ -578,8 +582,11 @@ class PolymarketDataFeed:
         if not price:
             return None
         
-        # Get historical data for strategies that need it
-        historical_prices = self.get_historical_prices(lookback_periods=100)
+        # Get current window for filtering historical data
+        current_window = (int(time.time()) // 300) * 300
+        
+        # Get historical data for current window only
+        historical_prices = self.get_historical_prices(current_window, lookback_periods=100)
         
         return MarketData(
             timestamp=time.time(),
@@ -595,5 +602,6 @@ class PolymarketDataFeed:
             order_book=self.get_order_book(),
             sentiment='neutral',
             sentiment_confidence=0.5,
-            historical_prices=historical_prices  # Add historical data
+            historical_prices=historical_prices,
+            current_window=current_window  # Add current window info
         )
