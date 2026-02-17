@@ -32,6 +32,7 @@ from strategies.high_prob_convergence import HighProbabilityConvergenceStrategy
 from strategies.market_making import MarketMakingStrategy
 from strategies.copy_trading import CopyTradingStrategy
 from strategies.microstructure_scalper import MicrostructureScalperStrategy
+from strategies.ema_arbitrage import EMAArbitrageStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,7 +77,8 @@ class PaperTrader:
             HighProbabilityConvergenceStrategy(),
             MarketMakingStrategy(),
             CopyTradingStrategy(),
-            MicrostructureScalperStrategy(),  # NEW: High-frequency scalper
+            MicrostructureScalperStrategy(),
+            EMAArbitrageStrategy(),  # NEW: $427K PNL strategy from Twitter
         ]
         
         # Register all strategies
