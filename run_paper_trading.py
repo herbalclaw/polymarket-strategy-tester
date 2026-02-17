@@ -30,12 +30,9 @@ from strategies.volatility_scorer import VolatilityScorerStrategy
 from strategies.breakout_momentum import BreakoutMomentumStrategy
 from strategies.high_prob_convergence import HighProbabilityConvergenceStrategy
 from strategies.market_making import MarketMakingStrategy
-from strategies.copy_trading import CopyTradingStrategy
 from strategies.microstructure_scalper import MicrostructureScalperStrategy
 from strategies.ema_arbitrage import EMAArbitrageStrategy
 from strategies.longshot_bias import LongshotBiasStrategy
-from strategies.kalshi_arbitrage import KalshiArbitrageStrategy
-from strategies.cross_market_arbitrage import CrossMarketArbitrageStrategy
 from strategies.high_probability_bond import HighProbabilityBondStrategy
 
 logging.basicConfig(
@@ -80,12 +77,9 @@ class PaperTrader:
             BreakoutMomentumStrategy(),
             HighProbabilityConvergenceStrategy(),
             MarketMakingStrategy(),
-            CopyTradingStrategy(),
             MicrostructureScalperStrategy(),
             EMAArbitrageStrategy(),  # NEW: $427K PNL strategy from Twitter
             LongshotBiasStrategy(),  # NEW: Behavioral bias exploitation
-            KalshiArbitrageStrategy(),  # NEW: Cross-platform arbitrage
-            CrossMarketArbitrageStrategy(),  # NEW: Dependent markets arb
             HighProbabilityBondStrategy(),  # NEW: 96% win rate strategy
         ]
         
