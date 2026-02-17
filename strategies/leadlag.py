@@ -18,7 +18,7 @@ class LeadLagStrategy(BaseStrategy):
     def __init__(self, config: dict = None):
         super().__init__(config)
         self.price_history: deque = deque(maxlen=self.config.get('history_size', 20))
-        self.min_move_pct = self.config.get('min_move_pct', 0.05)
+        self.min_move_pct = self.config.get('min_move_pct', 0.02)  # Reduced from 0.05
     
     def generate_signal(self, data: MarketData) -> Optional[Signal]:
         if not data.exchange_prices:
@@ -32,11 +32,11 @@ class LeadLagStrategy(BaseStrategy):
         
         self.price_history.append(current_prices)
         
-        if len(self.price_history) < 3:
+        if len(self.price_history) < 2:
             return None
         
         # Compare current to previous
-        prev_prices = self.price_history[-3]  # Look back 3 samples
+        prev_prices = self.price_history[-2]  # Look back 2 samples (was 3)
         
         max_change = 0
         leading_exchange = None

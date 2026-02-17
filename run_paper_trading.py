@@ -31,6 +31,7 @@ from strategies.breakout_momentum import BreakoutMomentumStrategy
 from strategies.high_prob_convergence import HighProbabilityConvergenceStrategy
 from strategies.market_making import MarketMakingStrategy
 from strategies.copy_trading import CopyTradingStrategy
+from strategies.microstructure_scalper import MicrostructureScalperStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,7 @@ class PaperTrader:
             HighProbabilityConvergenceStrategy(),
             MarketMakingStrategy(),
             CopyTradingStrategy(),
+            MicrostructureScalperStrategy(),  # NEW: High-frequency scalper
         ]
         
         # Register all strategies

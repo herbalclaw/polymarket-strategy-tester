@@ -16,8 +16,8 @@ class VWAPStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
-        self.deviation_threshold = self.config.get('deviation_threshold', 0.1)
-        self.max_deviation = self.config.get('max_deviation', 1.0)
+        self.deviation_threshold = self.config.get('deviation_threshold', 0.05)  # Reduced from 0.1
+        self.max_deviation = self.config.get('max_deviation', 2.0)  # Increased from 1.0
     
     def generate_signal(self, data: MarketData) -> Optional[Signal]:
         current_price = data.price
