@@ -43,6 +43,7 @@ class HighProbabilityConvergenceStrategy(BaseStrategy):
                  stop_loss_bps: float = 100):
         super().__init__()
         self.name = "HighProbConvergence"
+        self.description = "Mean reversion targeting 65-96% probability outcomes"
         self.lookback_periods = lookback_periods
         self.deviation_threshold = deviation_threshold  # 1.5% deviation
         self.take_profit_bps = take_profit_bps  # 200 bps = 2%
