@@ -24,16 +24,13 @@ class MomentumStrategy(BaseStrategy):
         self.min_change_pct = self.config.get('min_change_pct', 0.05)
     
     def generate_signal(self, data: MarketData) -> Optional[Signal]:
-        # Use historical data from database if available, otherwise use internal history
-        if data.historical_prices and len(data.historical_prices) >= self.long_window:
-            # Extract mid prices from historical data
-            prices = [p['mid'] for p in data.historical_prices]
-        else:
-            # Fall back to internal price history
-            self.price_history.append(data.vwap)
-            if len(self.price_history) < self.long_window:
-                return None
-            prices = list(self.price_history)
+        # Store price history internally (builds up over time)
+        self.price_history.append(data.vwap)
+        
+        if len(self.price_history) < self.long_window:
+            return None
+        
+        prices = list(self.price_history)
         
         # Calculate moving averages
         sma_short = sum(prices[-self.short_window:]) / self.short_window

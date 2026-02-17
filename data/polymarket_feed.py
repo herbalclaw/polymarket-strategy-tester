@@ -577,16 +577,10 @@ class PolymarketDataFeed:
             return []
     
     def fetch_data(self) -> Optional[MarketData]:
-        """Fetch market data for strategies with historical context."""
+        """Fetch market data for strategies."""
         price = self.get_latest_price()
         if not price:
             return None
-        
-        # Get current window for filtering historical data
-        current_window = (int(time.time()) // 300) * 300
-        
-        # Get historical data for current window only
-        historical_prices = self.get_historical_prices(current_window, lookback_periods=100)
         
         return MarketData(
             timestamp=time.time(),
@@ -601,7 +595,5 @@ class PolymarketDataFeed:
             exchange_prices={},
             order_book=self.get_order_book(),
             sentiment='neutral',
-            sentiment_confidence=0.5,
-            historical_prices=historical_prices,
-            current_window=current_window  # Add current window info
+            sentiment_confidence=0.5
         )
