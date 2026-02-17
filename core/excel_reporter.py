@@ -34,6 +34,9 @@ class ExcelReporter:
         # Ensure file exists
         if not os.path.exists(self.filename):
             self._create_empty_file()
+        else:
+            # Load existing trades from Excel
+            self._load_existing_trades()
     
     def register_strategies(self, strategy_names: List[str]):
         """Register all strategies with initial capital."""
@@ -85,6 +88,62 @@ class ExcelReporter:
                 'Duration (min)': []
             }
             pd.DataFrame(trades_data).to_excel(writer, sheet_name='All Trades', index=False)
+    
+    def _load_existing_trades(self):
+        """Load existing trades from Excel file on startup."""
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            
+            with zipfile.ZipFile(self.filename, 'r') as z:
+                with z.open('xl/worksheets/sheet3.xml') as f:
+                    sheet_root = ET.fromstring(f.read())
+                    NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+                    
+                    for i, row in enumerate(sheet_root.iter(f'{NS}row')):
+                        if i == 0:  # Skip header
+                            continue
+                        
+                        cells = list(row.iter(f'{NS}c'))
+                        if len(cells) < 10:
+                            continue
+                        
+                        def get_value(cell):
+                            v = cell.find(f'{NS}v')
+                            if v is not None and v.text:
+                                return v.text
+                            is_elem = cell.find(f'{NS}is/{NS}t')
+                            if is_elem is not None and is_elem.text:
+                                return is_elem.text
+                            return ''
+                        
+                        trade_id = get_value(cells[0])
+                        if not trade_id or not trade_id.isdigit():
+                            continue
+                        
+                        status = get_value(cells[7]) if len(cells) > 7 else 'OPEN'
+                        
+                        trade_record = {
+                            'Trade #': int(trade_id),
+                            'Date': get_value(cells[1]),
+                            'Time': get_value(cells[2]),
+                            'Strategy': get_value(cells[3]),
+                            'Side': get_value(cells[4]),
+                            'Entry Price': float(get_value(cells[5]) or 0),
+                            'Exit Price': float(get_value(cells[6]) or 0),
+                            'Status': status,
+                            'P&L %': float(get_value(cells[8]) or 0),
+                            'P&L $': float(get_value(cells[9]) or 0),
+                        }
+                        
+                        if status == 'CLOSED':
+                            self.closed_trades.append(trade_record)
+                        else:
+                            self.open_trades.append(trade_record)
+                            
+            print(f"Loaded {len(self.closed_trades)} closed trades and {len(self.open_trades)} open trades from Excel")
+        except Exception as e:
+            print(f"Warning: Could not load existing trades: {e}")
     
     def record_trade_open(self, strategy_name: str, signal, entry_price: float,
                           entry_reason: str) -> Optional[Dict]:
