@@ -49,9 +49,9 @@ class PolymarketDataFeed:
         self.token_window = 0  # Track which window tokens belong to
         
     def _get_current_db_path(self) -> str:
-        """Get path to current database file."""
-        from datetime import datetime
-        now = datetime.now()
+        """Get path to current database file - uses UTC like data collector."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)  # Use UTC, not local time
         period = "AM" if now.hour < 12 else "PM"
         return f"{self.data_collector_path}/data/raw/btc_hf_{now:%Y-%m-%d}_{period}.db"
     
