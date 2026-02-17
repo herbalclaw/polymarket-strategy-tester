@@ -51,11 +51,11 @@ class MicrostructureScalperStrategy(BaseStrategy):
             return None
         
         # Need order book data
-        if not data.orderbook:
+        if not data.order_book:
             return None
         
-        bids = data.orderbook.get('bids', [])
-        asks = data.orderbook.get('asks', [])
+        bids = data.order_book.get('bids', [])
+        asks = data.order_book.get('asks', [])
         
         if not bids or not asks:
             return None
