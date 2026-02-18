@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """
-Paper Trading Bot for Polymarket BTC 5-min Markets
-Correctly handles binary settlement and position management
+Enhanced Paper Trading Bot with Risk Management and Rate Limiting
+Integrates new modules: rate_limiter, risk_manager, whale_tracker
 """
 
 import asyncio
@@ -15,10 +14,18 @@ from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Core components
 from core.base_strategy import Signal
 from core.excel_reporter import ExcelReporter
 from core.github_pusher import GitHubAutoPusher
 from data.polymarket_feed import PolymarketDataFeed
+
+# New risk and rate limiting modules
+from rate_limiter import get_rate_limiter, EndpointCategory
+from risk_manager import RiskManager, RiskLimits
+from whale_tracker import WhaleTracker, WhaleCopyStrategy
+
+# Strategies
 from strategies.momentum import MomentumStrategy
 from strategies.arbitrage import ArbitrageStrategy
 from strategies.vwap import VWAPStrategy
@@ -43,17 +50,48 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger('paper_trader')
+logger = logging.getLogger('enhanced_paper_trader')
 
 
-class PaperTrader:
-    """Paper trading bot for BTC 5-min prediction markets."""
+class EnhancedPaperTrader:
+    """
+    Enhanced paper trading bot with:
+    - Token bucket rate limiting
+    - Risk management with configurable limits
+    - Whale tracking and copy-trading
+    - Better async HTTP handling
+    """
     
     def __init__(self):
         self.running = False
         self.cycle = 0
         self.trades_executed = 0
         self.trade_counter = 0
+        
+        # Rate limiter
+        self.rate_limiter = get_rate_limiter()
+        
+        # Risk manager with default limits
+        risk_limits = RiskLimits(
+            max_order_size=100.0,
+            max_position_size=500.0,
+            max_total_exposure=1000.0,
+            max_daily_loss=100.0,
+            max_drawdown_pct=0.20,
+            max_trades_per_hour=20,
+            min_spread_pct=0.005,
+            max_spread_pct=0.10
+        )
+        self.risk_manager = RiskManager(risk_limits)
+        
+        # Whale tracker (optional - can be enabled later)
+        self.whale_tracker = WhaleTracker()
+        self.whale_strategy = WhaleCopyStrategy(
+            self.whale_tracker,
+            min_confidence=70.0,
+            position_size_pct=0.1,
+            max_positions=3
+        )
         
         # Components
         self.feed = PolymarketDataFeed()
@@ -78,17 +116,16 @@ class PaperTrader:
             HighProbabilityConvergenceStrategy(),
             MarketMakingStrategy(),
             MicrostructureScalperStrategy(),
-            EMAArbitrageStrategy(),  # NEW: $427K PNL strategy from Twitter
-            LongshotBiasStrategy(),  # NEW: Behavioral bias exploitation
-            HighProbabilityBondStrategy(),  # NEW: 96% win rate strategy
+            EMAArbitrageStrategy(),
+            LongshotBiasStrategy(),
+            HighProbabilityBondStrategy(),
         ]
         
         # Register all strategies
         strategy_names = [s.name for s in self.strategies]
         self.reporter.register_strategies(strategy_names)
         
-        # Track open positions per strategy
-        # Key: strategy_name, Value: position dict
+        # Track open positions
         self.open_positions: Dict[str, Dict] = {}
     
     def get_current_market_window(self) -> int:
@@ -96,71 +133,52 @@ class PaperTrader:
         return (int(time.time()) // 300) * 300
 
     def get_next_market_window(self) -> int:
-        """Get next 5-minute market window timestamp - like streak bot."""
+        """Get next 5-minute market window timestamp."""
         return self.get_current_market_window() + 300
 
     def evaluate_strategies(self, market_data) -> List[Signal]:
-        """Get signals from active (non-bankrupt) strategies."""
+        """Get signals from active (non-bankrupt) strategies with risk checks."""
         signals = []
+        
         for strategy in self.strategies:
             if not self.reporter.is_strategy_active(strategy.name):
                 continue
+            
+            # Check strategy-specific risk limits
+            strategy_capital = self.reporter.get_strategy_capital(strategy.name)
+            allowed, reason = self.risk_manager.check_strategy_limits(
+                strategy.name, strategy_capital
+            )
+            
+            if not allowed:
+                logger.debug(f"Strategy {strategy.name} blocked: {reason}")
+                continue
+            
             try:
                 signal = strategy.generate_signal(market_data)
                 if signal and signal.confidence >= 0.6:
                     signals.append(signal)
             except Exception as e:
                 logger.error(f"Strategy {strategy.name} error: {e}")
+        
         return signals
     
     def calculate_early_exit_pnl(self, entry_price: float, exit_price: float, side: str) -> Tuple[float, float]:
-        """
-        Calculate P&L for early exit (selling before expiry).
-        Returns DOLLAR PnL (per-share PnL * trade_size)
-        """
-        trade_size = 5.0  # $5 per trade
+        """Calculate P&L for early exit. Returns DOLLAR PnL."""
+        trade_size = 5.0
         
         if side.lower() == 'down':
-            # For DOWN positions, we profit when price goes down
             pnl_per_share = entry_price - exit_price
         else:
-            # For UP positions, we profit when price goes up
             pnl_per_share = exit_price - entry_price
         
-        # Convert to dollar PnL
         pnl_dollars = pnl_per_share * trade_size
         pnl_pct = (pnl_per_share / entry_price) * 100 if entry_price > 0 else 0
         
         return pnl_dollars, pnl_pct
     
-    def calculate_expiry_settlement(self, entry_price: float, side: str, won: bool) -> Tuple[float, float]:
-        """
-        Calculate P&L for holding to expiry.
-        
-        Args:
-            entry_price: Price paid for token
-            side: 'up' or 'down'
-            won: True if prediction was correct
-        
-        Returns:
-            (pnl_amount, pnl_pct)
-        """
-        if won:
-            # Winner: token settles to $1.00
-            # Profit = $1.00 - entry_price
-            exit_price = 1.0
-            pnl_amount = 1.0 - entry_price
-        else:
-            # Loser: token settles to $0.00
-            # Loss = -entry_price
-            exit_price = 0.0
-            pnl_amount = -entry_price
-        
-        pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
-        return exit_price, pnl_amount, pnl_pct
-    
     async def execute_entry(self, signal: Signal) -> Optional[Dict]:
-        """Open a new position."""
+        """Open a new position with risk checks."""
         strategy_name = signal.strategy
         
         # Check if strategy already has open position
@@ -168,29 +186,55 @@ class PaperTrader:
             logger.debug(f"{strategy_name} already has open position, skipping entry")
             return None
         
-        # EDGE CASE: Don't enter in last 15 seconds of window (too close to expiry)
+        # EDGE CASE: Don't enter in last 15 seconds of window
         time_in_window = time.time() % 300
         if time_in_window > 285:
             logger.debug(f"Too close to expiry ({time_in_window:.0f}s), skipping entry")
             return None
         
-        # Get entry fill from Polymarket
+        # Get market data for risk checks
+        market_data = self.feed.fetch_data()
+        if not market_data:
+            return None
+        
+        # Calculate spread for risk check
+        spread_pct = 0.02  # Default 2% spread
+        if hasattr(market_data, 'spread') and market_data.spread:
+            mid = (market_data.best_bid + market_data.best_ask) / 2
+            if mid > 0:
+                spread_pct = market_data.spread / mid
+        
+        # Risk check
+        strategy_capital = self.reporter.get_strategy_capital(strategy_name)
+        allowed, reason = self.risk_manager.check_order_allowed(
+            strategy_name=strategy_name,
+            order_size=5.0,
+            spread_pct=spread_pct,
+            current_capital=strategy_capital
+        )
+        
+        if not allowed:
+            logger.warning(f"Risk check failed for {strategy_name}: {reason}")
+            return None
+        
+        # Rate limit before API call
+        await self.rate_limiter.acquire(EndpointCategory.MARKET_DATA, tokens=1)
+        
+        # Get entry fill
         entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
             size_dollars=5.0
         )
         
-        # EDGE CASE: Invalid price (allow 0.01 and 0.99, reject 0.50 default)
+        # Validate price
         if entry_price < 0.01 or entry_price > 0.99 or entry_price == 0.5:
             logger.warning(f"Invalid entry price: {entry_price}, skipping")
             return None
         
-        # EDGE CASE: High slippage indicates low liquidity
         if entry_status == "high_slippage":
             logger.warning(f"High slippage: {entry_slippage} bps, skipping")
             return None
         
-        # EDGE CASE: No fill
         if entry_status == "no_fill":
             logger.warning(f"No fill available, skipping")
             return None
@@ -198,12 +242,11 @@ class PaperTrader:
         market_window = self.get_next_market_window()
         strike_price = self.feed.get_strike_price()
         
-        # EDGE CASE: No strike price available
         if strike_price is None:
             logger.warning(f"No strike price available, skipping")
             return None
         
-        logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window} | Strike: {strike_price}")
+        logger.info(f"Entry: {entry_price:.4f} | Strategy: {strategy_name} | Window: {market_window}")
         
         return {
             'signal': signal,
@@ -219,7 +262,9 @@ class PaperTrader:
         side = position['side']
         entry_price = position['entry_price']
         
-        # Get exit fill from Polymarket (same side token)
+        # Rate limit before API call
+        await self.rate_limiter.acquire(EndpointCategory.MARKET_DATA, tokens=1)
+        
         exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
             side=side,
             size_dollars=5.0
@@ -230,7 +275,6 @@ class PaperTrader:
             exit_price = entry_price
             exit_slippage = 0
         
-        # Calculate P&L for early exit
         pnl_amount, pnl_pct = self.calculate_early_exit_pnl(entry_price, exit_price, side)
         
         return {
@@ -242,23 +286,17 @@ class PaperTrader:
         }
     
     def check_expiry_settlement(self, position: Dict) -> Optional[Dict]:
-        """
-        Check if position has reached expiry and settle it using Polymarket's official result.
-        Uses streak bot logic: checks umaResolutionStatus for reliable settlement detection.
-        """
+        """Check if position has reached expiry and settle it."""
         market_window = position['market_window']
         current_window = self.get_current_market_window()
         
-        # Window hasn't closed yet
         if current_window <= market_window:
             return None
         
-        # EDGE CASE: Window closed but we're more than 1 window behind
         if current_window > market_window + 300:
-            logger.warning(f"Position from window {market_window} is stale (current: {current_window})")
+            logger.warning(f"Position from window {market_window} is stale")
             entry_price = position['entry_price']
             side = position['side']
-            # Force settlement as loss
             exit_price = 0.0
             pnl_amount = -entry_price
             pnl_pct = -100.0
@@ -270,17 +308,14 @@ class PaperTrader:
                 'result': 'STALE_LOSS',
             }
         
-        # Window closed - get settlement result from Polymarket using streak bot logic
         settlement_result = self.feed.get_settlement_result(market_window)
         
-        # Can't get settlement, retry next cycle
         if settlement_result is None:
             logger.debug(f"Settlement not available for window {market_window}, retrying...")
             return None
         
         outcome, (up_price, down_price) = settlement_result
         
-        # Market closed but not resolved yet (umaResolutionStatus pending)
         if outcome == 'pending':
             logger.debug(f"Market {market_window} closed but not resolved yet, waiting...")
             return None
@@ -288,18 +323,15 @@ class PaperTrader:
         entry_price = position['entry_price']
         side = position['side']
         
-        # Determine winner based on Polymarket's official settlement
-        # Using streak bot logic: outcome is 'up' or 'down'
         won = (side == outcome)
         exit_price = up_price if side == 'up' else down_price
         
         result = "WIN" if won else "LOSE"
         
-        # Calculate settlement P&L
         if won:
-            pnl_amount = 1.0 - entry_price  # Paid entry, get $1.00
+            pnl_amount = 1.0 - entry_price
         else:
-            pnl_amount = -entry_price  # Paid entry, get $0.00
+            pnl_amount = -entry_price
         
         pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
         
@@ -312,15 +344,19 @@ class PaperTrader:
         }
     
     async def run(self):
-        """Main trading loop."""
+        """Main trading loop with enhanced monitoring."""
         self.running = True
         
         logger.info("=" * 70)
-        logger.info("🚀 PAPER TRADING BOT - BTC 5-min Markets")
+        logger.info("🚀 ENHANCED PAPER TRADING BOT - BTC 5-min Markets")
         logger.info("=" * 70)
         logger.info(f"Strategies: {len(self.strategies)}")
-        logger.info("Capital: $100 per strategy, $5 per trade")
-        logger.info("Settlement: Early exit OR hold to expiry ($1.00/$0.00)")
+        logger.info("Risk Limits:")
+        limits = self.risk_manager.limits
+        logger.info(f"  Max Order: ${limits.max_order_size}")
+        logger.info(f"  Max Exposure: ${limits.max_total_exposure}")
+        logger.info(f"  Max Daily Loss: ${limits.max_daily_loss}")
+        logger.info(f"  Max Drawdown: {limits.max_drawdown_pct:.0%}")
         logger.info("=" * 70)
         
         while self.running:
@@ -328,7 +364,9 @@ class PaperTrader:
                 self.cycle += 1
                 current_time = datetime.now()
                 
-                # Get market data
+                # Get market data with rate limiting
+                await self.rate_limiter.acquire(EndpointCategory.GAMMA_API, tokens=1)
+                
                 try:
                     market_data = self.feed.fetch_data()
                 except Exception as e:
@@ -346,107 +384,20 @@ class PaperTrader:
                     await asyncio.sleep(5)
                     continue
                 
-                # Process open positions - check for expiry settlement first
-                logger.debug(f"Processing {len(self.open_positions)} open positions...")
-                for strategy_name, position in list(self.open_positions.items()):
-                    try:
-                        logger.debug(f"Checking position: {strategy_name}")
-                        # First check if window expired (settlement)
-                        settlement = self.check_expiry_settlement(position)
-                        
-                        if settlement:
-                            # Window closed - settle at expiry
-                            del self.open_positions[strategy_name]
-                            self.trades_executed += 1
-                            
-                            # Record close
-                            closed_trade = self.reporter.record_trade_close(
-                                trade_id=position['trade_id'],
-                                exit_price=settlement['exit_price'],
-                                pnl_pct=settlement['pnl_pct'],
-                                exit_reason=f"expiry_{settlement['result'].lower()}",
-                                duration_minutes=5.0,
-                                pnl_amount=settlement['pnl_amount']
-                            )
-                            
-                            # Push to GitHub (disabled for debugging)
-                            # if closed_trade:
-                            #     asyncio.create_task(self._push_trade_update(
-                            #         len(self.reporter.closed_trades),
-                            #         closed_trade
-                            #     ))
-                            
-                            logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.1f}%)")
-                            continue
-                        
-                        # No expiry yet - check for early exit conditions
-                        entry_time = position.get('entry_time', current_time)
-                        hold_time = (current_time - entry_time).total_seconds()
-                        
-                        # Exit after 5 minutes wall time OR if price moved significantly
-                        entry_price = position['entry_price']
-                        current_price = market_data.price
-                        price_change_pct = abs(current_price - entry_price) / entry_price * 100
-                        
-                        should_exit_early = hold_time >= 300 or price_change_pct >= 10
-                        
-                        logger.debug(f"Position {strategy_name}: hold_time={hold_time:.1f}s, price_change={price_change_pct:.2f}%, should_exit={should_exit_early}")
-                        
-                        if should_exit_early:
-                            logger.info(f"Exiting {strategy_name} early: hold={hold_time:.1f}s, change={price_change_pct:.2f}%")
-                            logger.debug(f"Calling execute_early_exit for {strategy_name}...")
-                            exit_result = await self.execute_early_exit(position)
-                            logger.debug(f"execute_early_exit returned: {exit_result}")
-                            if exit_result:
-                                del self.open_positions[strategy_name]
-                                self.trades_executed += 1
-                                
-                                # Record close
-                                logger.debug(f"Recording trade close for {position['trade_id']}...")
-                                closed_trade = self.reporter.record_trade_close(
-                                    trade_id=position['trade_id'],
-                                    exit_price=exit_result['exit_price'],
-                                    pnl_pct=exit_result['pnl_pct'],
-                                    exit_reason='early_exit',
-                                    duration_minutes=hold_time / 60,
-                                    pnl_amount=exit_result['pnl_amount']
-                                )
-                                logger.debug(f"record_trade_close returned: {closed_trade}")
-                                
-                                # Push to GitHub (disabled for debugging)
-                                # if closed_trade:
-                                #     asyncio.create_task(self._push_trade_update(
-                                #         len(self.reporter.closed_trades),
-                                #         closed_trade
-                                #     ))
-                                
-                                logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
-                                
-                    except Exception as e:
-                        logger.error(f"Error processing position {strategy_name}: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
+                # Process open positions
+                await self._process_positions(current_time)
                 
                 # Get entry signals
-                logger.debug("Evaluating strategies...")
                 signals = self.evaluate_strategies(market_data)
-                logger.debug(f"Got {len(signals)} signals")
                 
                 for signal in signals:
-                    logger.debug(f"Processing signal: {signal.strategy}")
-                    # Execute entry
                     result = await self.execute_entry(signal)
                     if not result:
-                        logger.debug(f"execute_entry returned None for {signal.strategy}")
                         continue
                     
-                    logger.debug(f"Entry executed: {result}")
-                    
-                    # Record open
                     self.trade_counter += 1
                     trade_id = self.trade_counter
                     
-                    logger.debug(f"Recording trade open: {trade_id}")
                     open_record = self.reporter.record_trade_open(
                         strategy_name=signal.strategy,
                         signal=signal,
@@ -455,10 +406,16 @@ class PaperTrader:
                     )
                     
                     if not open_record:
-                        logger.warning(f"Failed to record trade open for {signal.strategy}")
                         continue
                     
-                    logger.debug(f"Trade recorded: {open_record}")
+                    # Record trade in risk manager
+                    self.risk_manager.record_trade(
+                        strategy_name=signal.strategy,
+                        market_id=str(result['market_window']),
+                        side=signal.signal.upper(),
+                        size=5.0,
+                        price=result['entry_price']
+                    )
                     
                     self.open_positions[signal.strategy] = {
                         'trade_id': trade_id,
@@ -471,17 +428,20 @@ class PaperTrader:
                     
                     logger.info(f"🔓 Trade #{trade_id} opened | {signal.strategy} | Price: {result['entry_price']:.4f}")
                 
-                # Status
+                # Periodic status with risk report
                 if self.cycle % 10 == 0:
+                    risk_report = self.risk_manager.get_risk_report()
                     logger.info(f"📊 Cycle {self.cycle} | Open: {len(self.open_positions)} | Closed: {self.trades_executed}")
+                    logger.info(f"   Daily P&L: ${risk_report['daily_pnl']:+.2f} | Exposure: ${risk_report['current_exposure']:.2f}")
                 
-                # Keep-alive log every minute
-                if self.cycle % 12 == 0:
-                    logger.info(f"💓 Keep-alive | Cycle {self.cycle} | Running normally")
+                # Rate limiter status every 5 minutes
+                if self.cycle % 60 == 0:
+                    status = self.rate_limiter.get_status()
+                    for category, info in status.items():
+                        if info['is_throttled']:
+                            logger.warning(f"Rate limiter throttled: {category}")
                 
-                logger.debug("Sleeping 5 seconds...")
                 await asyncio.sleep(5)
-                logger.debug("Woke up")
                 
             except asyncio.TimeoutError:
                 logger.error("Cycle timeout!")
@@ -492,34 +452,100 @@ class PaperTrader:
                 logger.error(traceback.format_exc())
                 await asyncio.sleep(5)
     
-    async def _push_trade_update(self, trade_count: int, trade_data: dict):
-        """Async wrapper for GitHub push."""
-        try:
-            await asyncio.to_thread(self.pusher.push_on_trade_close, trade_count, trade_data)
-        except Exception as e:
-            logger.error(f"GitHub push error: {e}")
-    
-    def stop(self):
-        """Stop gracefully."""
+    async def _process_positions(self, current_time: datetime):
+        """Process all open positions."""
+        for strategy_name, position in list(self.open_positions.items()):
+            try:
+                # Check expiry settlement
+                settlement = self.check_expiry_settlement(position)
+                
+                if settlement:
+                    del self.open_positions[strategy_name]
+                    self.trades_executed += 1
+                    
+                    # Record in risk manager
+                    self.risk_manager.record_trade(
+                        strategy_name=strategy_name,
+                        market_id=str(position['market_window']),
+                        side="EXIT",
+                        size=5.0,
+                        price=settlement['exit_price'],
+                        pnl=settlement['pnl_amount']
+                    )
+                    
+                    # Record close
+                    closed_trade = self.reporter.record_trade_close(
+                        trade_id=position['trade_id'],
+                        exit_price=settlement['exit_price'],
+                        pnl_pct=settlement['pnl_pct'],
+                        exit_reason=f"expiry_{settlement['result'].lower()}",
+                        duration_minutes=5.0,
+                        pnl_amount=settlement['pnl_amount']
+                    )
+                    
+                    logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f}")
+                    continue
+                
+                # Check for early exit
+                entry_time = position.get('entry_time', current_time)
+                hold_time = (current_time - entry_time).total_seconds()
+                
+                entry_price = position['entry_price']
+                current_price_data = self.feed.fetch_data()
+                if current_price_data and hasattr(current_price_data, 'price'):
+                    current_price = current_price_data.price
+                    price_change_pct = abs(current_price - entry_price) / entry_price * 100
+                else:
+                    price_change_pct = 0
+                
+                should_exit_early = hold_time >= 300 or price_change_pct >= 10
+                
+                if should_exit_early:
+                    exit_result = await self.execute_early_exit(position)
+                    if exit_result:
+                        del self.open_positions[strategy_name]
+                        self.trades_executed += 1
+                        
+                        # Record in risk manager
+                        self.risk_manager.record_trade(
+                            strategy_name=strategy_name,
+                            market_id=str(position['market_window']),
+                            side="EXIT",
+                            size=5.0,
+                            price=exit_result['exit_price'],
+                            pnl=exit_result['pnl_amount']
+                        )
+                        
+                        closed_trade = self.reporter.record_trade_close(
+                            trade_id=position['trade_id'],
+                            exit_price=exit_result['exit_price'],
+                            pnl_pct=exit_result['pnl_pct'],
+                            exit_reason='early_exit',
+                            duration_minutes=hold_time / 60,
+                            pnl_amount=exit_result['pnl_amount']
+                        )
+                        
+                        logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f}")
+                        
+            except Exception as e:
+                logger.error(f"Error processing position {strategy_name}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
+    def shutdown(self):
+        """Graceful shutdown."""
+        logger.info("Shutting down enhanced paper trader...")
         self.running = False
-        logger.info("Stopping...")
-        # Flush Excel before exiting
-        try:
-            self.reporter._write_excel()
-            logger.info("Excel saved")
-        except Exception as e:
-            logger.error(f"Error saving Excel: {e}")
 
 
 async def main():
-    trader = PaperTrader()
+    trader = EnhancedPaperTrader()
     
-    def handle_signal(sig, frame):
-        logger.info(f"Received signal {sig}, stopping...")
-        trader.stop()
+    def signal_handler(sig, frame):
+        trader.shutdown()
     
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     try:
         await trader.run()
@@ -527,14 +553,7 @@ async def main():
         logger.error(f"Fatal error: {e}")
         import traceback
         logger.error(traceback.format_exc())
-    finally:
-        logger.info("Bot exiting")
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        print(f"Fatal error in main: {e}")
-        import traceback
-        traceback.print_exc()
+    asyncio.run(main())

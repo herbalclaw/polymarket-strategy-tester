@@ -212,7 +212,7 @@ class ExcelReporter:
             # If pnl_amount provided, use it (for binary markets)
             # Otherwise calculate from percentage
             if pnl_amount is not None:
-                pnl_dollars = pnl_amount
+                pnl_dollars = pnl_amount  # Bot now returns dollar PnL directly
             else:
                 pnl_dollars = (pnl_pct / 100) * self.trade_size
             
