@@ -66,7 +66,7 @@ class StaleQuoteArbitrage(BaseStrategy):
         
         return yes_liquidity >= self.min_liquidity and no_liquidity >= self.min_liquidity
     
-    def generate_signal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def generate_signal(self, data) -> Optional[Dict[str, Any]]:
         """
         Generate trading signal based on arbitrage opportunity.
         
@@ -76,10 +76,19 @@ class StaleQuoteArbitrage(BaseStrategy):
         Returns:
             Signal dict or None
         """
-        yes_price = data.get('yes_price', 0.5)
-        no_price = data.get('no_price', 0.5)
-        orderbook = data.get('orderbook', {})
-        current_time = data.get('timestamp', 0)
+        # Handle both dict and MarketData objects
+        if hasattr(data, 'metadata'):
+            # MarketData object - extract from metadata
+            yes_price = data.metadata.get('yes_price', 0.5) if data.metadata else 0.5
+            no_price = data.metadata.get('no_price', 0.5) if data.metadata else 0.5
+            orderbook = data.order_book or {}
+            current_time = data.timestamp
+        else:
+            # Dict object
+            yes_price = data.get('yes_price', 0.5) if isinstance(data, dict) else 0.5
+            no_price = data.get('no_price', 0.5) if isinstance(data, dict) else 0.5
+            orderbook = data.get('orderbook', {}) if isinstance(data, dict) else {}
+            current_time = data.get('timestamp', 0) if isinstance(data, dict) else 0
         
         # Calculate arbitrage
         sum_price, arbitrage = self.calculate_arbitrage(yes_price, no_price)

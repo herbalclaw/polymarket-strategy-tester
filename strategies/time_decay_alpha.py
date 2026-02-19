@@ -86,7 +86,7 @@ class TimeDecayAlpha(BaseStrategy):
         
         return np.clip(true_prob, 0.01, 0.99)
     
-    def generate_signal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def generate_signal(self, data) -> Optional[Dict[str, Any]]:
         """
         Generate trading signal based on time decay analysis.
         
@@ -96,8 +96,18 @@ class TimeDecayAlpha(BaseStrategy):
         Returns:
             Signal dict or None
         """
-        current_price = data.get('price', 0.5)
-        time_to_close = data.get('time_to_close', 300)
+        # Handle both dict and MarketData objects
+        if hasattr(data, 'price'):
+            current_price = data.price
+            # Calculate time to close from market_end_time if available
+            if hasattr(data, 'market_end_time') and data.market_end_time:
+                import time
+                time_to_close = max(0, data.market_end_time - time.time())
+            else:
+                time_to_close = 300
+        else:
+            current_price = data.get('price', 0.5) if isinstance(data, dict) else 0.5
+            time_to_close = data.get('time_to_close', 300) if isinstance(data, dict) else 300
         
         # Update history
         self.price_history.append(current_price)

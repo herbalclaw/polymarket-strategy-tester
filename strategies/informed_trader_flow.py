@@ -115,14 +115,18 @@ class InformedTraderFlow(BaseStrategy):
             'total_volume': total_volume
         }
     
-    def detect_toxic_flow(self, data: Dict[str, Any]) -> float:
+    def detect_toxic_flow(self, data) -> float:
         """
         Detect toxic flow that might indicate adverse selection.
         
         Returns:
             Toxicity score (0-1, higher = more toxic)
         """
-        orderbook = data.get('orderbook', {})
+        # Handle both dict and MarketData objects
+        if hasattr(data, 'order_book'):
+            orderbook = data.order_book or {}
+        else:
+            orderbook = data.get('orderbook', {}) if isinstance(data, dict) else {}
         
         if not orderbook:
             return 0.0
@@ -140,7 +144,7 @@ class InformedTraderFlow(BaseStrategy):
         # High imbalance can indicate informed flow
         return min(imbalance, 1.0)
     
-    def generate_signal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def generate_signal(self, data) -> Optional[Dict[str, Any]]:
         """
         Generate trading signal based on informed flow detection.
         
@@ -150,10 +154,15 @@ class InformedTraderFlow(BaseStrategy):
         Returns:
             Signal dict or None
         """
-        current_price = data.get('price', 0.5)
+        # Handle both dict and MarketData objects
+        if hasattr(data, 'price'):
+            current_price = data.price
+            trades = data.metadata.get('trades', []) if data.metadata else []
+        else:
+            current_price = data.get('price', 0.5) if isinstance(data, dict) else 0.5
+            trades = data.get('trades', []) if isinstance(data, dict) else []
         
         # Update trade history
-        trades = data.get('trades', [])
         for trade in trades:
             self.trade_history.append(trade)
         
