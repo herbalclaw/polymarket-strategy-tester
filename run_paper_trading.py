@@ -91,6 +91,9 @@ from strategies.momentum_reversal import MomentumReversalStrategy
 from strategies.probability_constraint_arbitrage import ProbabilityConstraintArbitrage
 from strategies.information_divergence import InformationDivergenceStrategy
 from strategies.time_weighted_microstructure import TimeWeightedMicrostructureStrategy
+from strategies.book_pressure_reversion import BookPressureReversionStrategy
+from strategies.price_discovery_momentum import PriceDiscoveryMomentumStrategy
+from strategies.spread_scalper import SpreadScalperStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -195,6 +198,9 @@ class PaperTrader:
             ProbabilityConstraintArbitrage(),  # NEW: Exploit probability constraint violations
             InformationDivergenceStrategy(),  # NEW: Bayesian information divergence alpha
             TimeWeightedMicrostructureStrategy(),  # NEW: Time-weighted microstructure and VPIN
+            BookPressureReversionStrategy(),  # NEW: Mean reversion after extreme book pressure
+            PriceDiscoveryMomentumStrategy(),  # NEW: Capture momentum from gradual price discovery
+            SpreadScalperStrategy(),  # NEW: Capture bid-ask spread through liquidity provision
         ]
         
         # Register all strategies

@@ -43,6 +43,9 @@ from .momentum_reversal import MomentumReversalStrategy
 from .probability_constraint_arbitrage import ProbabilityConstraintArbitrage
 from .information_divergence import InformationDivergenceStrategy
 from .time_weighted_microstructure import TimeWeightedMicrostructureStrategy
+from .book_pressure_reversion import BookPressureReversionStrategy
+from .price_discovery_momentum import PriceDiscoveryMomentumStrategy
+from .spread_scalper import SpreadScalperStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -86,4 +89,7 @@ __all__ = [
     'ProbabilityConstraintArbitrage',
     'InformationDivergenceStrategy',
     'TimeWeightedMicrostructureStrategy',
+    'BookPressureReversionStrategy',
+    'PriceDiscoveryMomentumStrategy',
+    'SpreadScalperStrategy',
 ]
