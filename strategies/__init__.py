@@ -10,6 +10,9 @@ from .sentiment import SentimentStrategy
 from .volatility_expansion import VolatilityExpansionStrategy
 from .informed_trader_flow import InformedTraderFlowStrategy
 from .contrarian_extreme import ContrarianExtremeStrategy
+from .fee_optimized_scalper import FeeOptimizedScalperStrategy
+from .tick_size_arbitrage import TickSizeArbitrageStrategy
+from .ivmr import IVMRStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -19,5 +22,8 @@ __all__ = [
     'SentimentStrategy',
     'VolatilityExpansionStrategy',
     'InformedTraderFlowStrategy',
-    'ContrarianExtremeStrategy'
+    'ContrarianExtremeStrategy',
+    'FeeOptimizedScalperStrategy',
+    'TickSizeArbitrageStrategy',
+    'IVMRStrategy'
 ]

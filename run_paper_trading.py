@@ -46,6 +46,9 @@ from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 from strategies.volatility_expansion import VolatilityExpansionStrategy
 from strategies.informed_trader_flow import InformedTraderFlowStrategy
 from strategies.contrarian_extreme import ContrarianExtremeStrategy
+from strategies.fee_optimized_scalper import FeeOptimizedScalperStrategy
+from strategies.tick_size_arbitrage import TickSizeArbitrageStrategy
+from strategies.ivmr import IVMRStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,6 +108,9 @@ class PaperTrader:
             VolatilityExpansionStrategy(),  # NEW: Trade volatility expansion after compression
             InformedTraderFlowStrategy(),  # NEW: Detect smart money through volume-price patterns
             ContrarianExtremeStrategy(),  # NEW: Fade price extremes exploiting retail overreaction
+            FeeOptimizedScalperStrategy(),  # NEW: Fee-optimized scalping near price extremes
+            TickSizeArbitrageStrategy(),  # NEW: Exploit tick-size regime changes
+            IVMRStrategy(),  # NEW: Implied Volatility Mean Reversion
         ]
         
         # Register all strategies
