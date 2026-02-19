@@ -37,6 +37,9 @@ from strategies.high_probability_bond import HighProbabilityBondStrategy
 from strategies.time_decay import TimeDecayStrategy
 from strategies.bollinger_bands import BollingerBandsStrategy
 from strategies.spread_capture import SpreadCaptureStrategy
+from strategies.vpin import VPINStrategy
+from strategies.time_weighted_momentum import TimeWeightedMomentumStrategy
+from strategies.price_skew import PriceSkewStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,6 +90,9 @@ class PaperTrader:
             TimeDecayStrategy(),  # NEW: Time premium harvesting
             BollingerBandsStrategy(),  # NEW: Mean reversion with BB
             SpreadCaptureStrategy(),  # NEW: Market making spread capture
+            VPINStrategy(),  # NEW: Volume-synchronized informed trading detection
+            TimeWeightedMomentumStrategy(),  # NEW: Time-weighted momentum for 5-min windows
+            PriceSkewStrategy(),  # NEW: YES/NO price skew sentiment detection
         ]
         
         # Register all strategies
