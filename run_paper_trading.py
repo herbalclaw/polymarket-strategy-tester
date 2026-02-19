@@ -67,6 +67,9 @@ from strategies.smart_money_flow import SmartMoneyFlowStrategy
 from strategies.kelly_criterion import KellyCriterionStrategy
 from strategies.time_decay_alpha import TimeDecayAlphaStrategy
 from strategies.toxic_flow_detector import ToxicFlowDetectorStrategy
+from strategies.dual_class_arbitrage import DualClassArbitrageStrategy
+from strategies.no_farming import NoFarmingStrategy
+from strategies.high_probability_compounding import HighProbabilityCompoundingStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -147,6 +150,9 @@ class PaperTrader:
             KellyCriterionStrategy(),  # NEW: Kelly criterion optimal bet sizing
             TimeDecayAlphaStrategy(),  # NEW: Exploit time decay in short-term markets
             ToxicFlowDetectorStrategy(),  # NEW: Detect and fade toxic order flow
+            DualClassArbitrageStrategy(),  # NEW: YES+NO parity arbitrage
+            NoFarmingStrategy(),  # NEW: Systematic NO farming exploiting long-shot bias
+            HighProbabilityCompoundingStrategy(),  # NEW: High-probability auto-compounding
         ]
         
         # Register all strategies

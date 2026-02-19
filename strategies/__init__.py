@@ -25,6 +25,9 @@ from .gamma_scalp import GammaScalpStrategy
 from .microprice_reversion import MicroPriceReversionStrategy
 from .late_entry_momentum import LateEntryMomentumStrategy
 from .smart_money_flow import SmartMoneyFlowStrategy
+from .dual_class_arbitrage import DualClassArbitrageStrategy
+from .no_farming import NoFarmingStrategy
+from .high_probability_compounding import HighProbabilityCompoundingStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -49,5 +52,8 @@ __all__ = [
     'GammaScalpStrategy',
     'MicroPriceReversionStrategy',
     'LateEntryMomentumStrategy',
-    'SmartMoneyFlowStrategy'
+    'SmartMoneyFlowStrategy',
+    'DualClassArbitrageStrategy',
+    'NoFarmingStrategy',
+    'HighProbabilityCompoundingStrategy'
 ]
