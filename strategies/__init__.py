@@ -16,6 +16,9 @@ from .ivmr import IVMRStrategy
 from .orderbook_imbalance import OrderBookImbalanceStrategy
 from .time_decay_scalper import TimeDecayScalpingStrategy
 from .spread_capture import SpreadCaptureStrategy
+from .momentum_ignition import MomentumIgnitionStrategy
+from .range_bound_mr import RangeBoundMeanReversionStrategy
+from .liquidity_sweep import LiquiditySweepStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -31,5 +34,8 @@ __all__ = [
     'IVMRStrategy',
     'OrderBookImbalanceStrategy',
     'TimeDecayScalpingStrategy',
-    'SpreadCaptureStrategy'
+    'SpreadCaptureStrategy',
+    'MomentumIgnitionStrategy',
+    'RangeBoundMeanReversionStrategy',
+    'LiquiditySweepStrategy'
 ]

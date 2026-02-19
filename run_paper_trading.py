@@ -52,6 +52,9 @@ from strategies.ivmr import IVMRStrategy
 from strategies.orderbook_imbalance import OrderBookImbalanceStrategy
 from strategies.time_decay_scalper import TimeDecayScalpingStrategy
 from strategies.spread_capture import SpreadCaptureStrategy
+from strategies.momentum_ignition import MomentumIgnitionStrategy
+from strategies.range_bound_mr import RangeBoundMeanReversionStrategy
+from strategies.liquidity_sweep import LiquiditySweepStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -117,6 +120,9 @@ class PaperTrader:
             OrderBookImbalanceStrategy(),  # NEW: Order book imbalance microstructure alpha
             TimeDecayScalpingStrategy(),  # NEW: Exploits time decay in short-term prediction markets
             SpreadCaptureStrategy(),  # NEW: Capture bid-ask spread micro-inefficiencies
+            MomentumIgnitionStrategy(),  # NEW: Trade momentum ignition and follow-through
+            RangeBoundMeanReversionStrategy(),  # NEW: Mean reversion within identified price ranges
+            LiquiditySweepStrategy(),  # NEW: Fade liquidity sweeps and capture reversals
         ]
         
         # Register all strategies
