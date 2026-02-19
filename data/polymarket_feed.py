@@ -259,21 +259,20 @@ class PolymarketDataFeed:
         if self._ensure_connection():
             try:
                 cursor = self.conn.cursor()
-                # Get latest price update from database (using correct column names)
+                # Get latest price update from database (collector_hf schema)
                 cursor.execute('''
-                    SELECT timestamp_ms, yes_bid, yes_ask, no_bid, no_ask
+                    SELECT timestamp_ms, bid, ask, mid, spread_bps
                     FROM price_updates
                     ORDER BY timestamp_ms DESC
                     LIMIT 1
                 ''')
                 row = cursor.fetchone()
                 if row:
-                    ts_ms, yes_bid, yes_ask, no_bid, no_ask = row
-                    # Calculate mid price from YES side
-                    bid = yes_bid if yes_bid else 0
-                    ask = yes_ask if yes_ask else 1
-                    mid = (bid + ask) / 2
-                    spread_bps = int((ask - bid) * 10000)
+                    ts_ms, bid_raw, ask_raw, mid_raw, spread_bps = row
+                    # Scale from integer (1M = 1.0)
+                    bid = bid_raw / 1_000_000
+                    ask = ask_raw / 1_000_000
+                    mid = mid_raw / 1_000_000
                     
                     price = PolymarketPrice(
                         timestamp_ms=ts_ms,
