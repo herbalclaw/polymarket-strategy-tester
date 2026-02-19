@@ -37,6 +37,9 @@ from .funding_rate_arbitrage import FundingRateArbitrageStrategy
 from .stale_quote_arbitrage import StaleQuoteArbitrageStrategy
 from .volatility_clustering import VolatilityClusteringStrategy
 from .layering_detection import LayeringDetectionStrategy
+from .flash_crash import FlashCrashStrategy
+from .flow_toxicity import FlowToxicityStrategy
+from .momentum_reversal import MomentumReversalStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -73,5 +76,8 @@ __all__ = [
     'FundingRateArbitrageStrategy',
     'StaleQuoteArbitrageStrategy',
     'VolatilityClusteringStrategy',
-    'LayeringDetectionStrategy'
+    'LayeringDetectionStrategy',
+    'FlashCrashStrategy',
+    'FlowToxicityStrategy',
+    'MomentumReversalStrategy'
 ]

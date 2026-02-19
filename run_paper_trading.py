@@ -85,6 +85,9 @@ from strategies.layering_detection import LayeringDetectionStrategy
 from strategies.liquidity_reward_optimized import LiquidityRewardOptimizedStrategy
 from strategies.asymmetric_momentum import AsymmetricMomentumStrategy
 from strategies.volume_profile_reversion import VolumeProfileReversionStrategy
+from strategies.flash_crash import FlashCrashStrategy
+from strategies.flow_toxicity import FlowToxicityStrategy
+from strategies.momentum_reversal import MomentumReversalStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -183,6 +186,9 @@ class PaperTrader:
             StaleQuoteArbitrageStrategy(),  # NEW: Exploit stale quotes during rapid moves
             VolatilityClusteringStrategy(),  # NEW: Trade volatility clustering (GARCH-based)
             LayeringDetectionStrategy(),  # NEW: Detect and fade layering manipulation
+            FlashCrashStrategy(),  # NEW: Capture flash crashes and volatility spikes
+            FlowToxicityStrategy(),  # NEW: VPIN-based order flow toxicity detection
+            MomentumReversalStrategy(),  # NEW: Momentum exhaustion reversal detection
         ]
         
         # Register all strategies
