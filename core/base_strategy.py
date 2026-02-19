@@ -44,11 +44,17 @@ class MarketData:
     sentiment: str = "neutral"
     sentiment_confidence: float = 0.5
     
+    # Additional metadata
+    metadata: Dict[str, Any] = None
+    market_end_time: float = None
+    
     def __post_init__(self):
         if self.exchange_prices is None:
             self.exchange_prices = {}
         if self.order_book is None:
             self.order_book = {}
+        if self.metadata is None:
+            self.metadata = {}
 
 
 class BaseStrategy(ABC):
