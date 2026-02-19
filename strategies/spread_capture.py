@@ -1,250 +1,219 @@
 """
-SpreadCapture Strategy
+SpreadCaptureStrategy
 
-Captures the bid-ask spread in Polymarket's CLOB by:
-1. Detecting when spread widens beyond normal levels
-2. Trading at favorable prices within the spread
-3. Capturing micro-inefficiencies in price formation
+Exploits bid-ask spread dynamics in prediction markets. Market makers
+quote spreads that vary based on volatility, inventory, and time to
+settlement. By capturing the spread at favorable times, we can generate
+consistent small profits.
 
-Key insight: In prediction markets, spreads often widen during:
-- High volatility periods
-- Low liquidity periods
-- Information events
+Key insight: Spreads widen during uncertainty and contract during stability.
+Entering near mid during wide spreads and exiting as spreads compress
+captures the spread decay.
 
-The strategy acts as a micro-market maker, providing liquidity
-when spreads are wide and capturing the edge when they narrow.
-
-Reference: Market making research - "Make the spread when it's wide"
+Reference: "Market Microstructure & High-Frequency Trading" - Preston (2024)
+"Bid-ask spread dynamics in prediction markets" - various
 """
 
 from typing import Optional
 from collections import deque
 import statistics
+import time
 
 from core.base_strategy import BaseStrategy, Signal, MarketData
 
 
 class SpreadCaptureStrategy(BaseStrategy):
     """
-    Capture bid-ask spread expansion and contraction.
+    Capture bid-ask spread compression profits.
     
     Strategy logic:
-    1. Track normal spread levels for the market
-    2. When spread widens > 1.5x normal + price near mid:
-       - Buy at bid if we expect spread to narrow
-       - Sell at ask if we expect spread to narrow
-    3. Capture the spread contraction edge
+    1. Monitor spread width relative to historical average
+    2. Enter positions when spreads are wide (>75th percentile)
+    3. Exit as spreads compress back to normal
+    4. Use limit orders when possible to capture maker rebates
     
-    Also detects "spread skew" - when bid or ask side is
-    significantly larger, indicating directional pressure.
+    Works best in volatile but mean-reverting conditions.
     """
     
     name = "SpreadCapture"
-    description = "Capture bid-ask spread micro-inefficiencies"
+    description = "Capture profits from bid-ask spread dynamics"
     
     def __init__(self, config: dict = None):
         super().__init__(config)
         
         # Spread tracking
         self.spread_history = deque(maxlen=50)
-        self.spread_threshold_mult = self.config.get('spread_threshold_mult', 1.5)
+        self.spread_percentiles = deque(maxlen=50)
+        
+        # Entry/exit thresholds (percentile-based)
+        self.wide_spread_threshold = self.config.get('wide_spread_threshold', 0.75)  # 75th percentile
+        self.normal_spread_threshold = self.config.get('normal_spread_threshold', 0.50)  # 50th percentile
+        
+        # Minimum spread requirements
         self.min_spread_bps = self.config.get('min_spread_bps', 10)  # 0.1%
-        self.max_spread_bps = self.config.get('max_spread_bps', 100)  # 1.0%
+        self.max_spread_bps = self.config.get('max_spread_bps', 200)  # 2%
         
-        # Price position within spread
-        self.mid_proximity_threshold = self.config.get('mid_proximity_threshold', 0.3)
+        # Volatility filter
+        self.price_history = deque(maxlen=30)
+        self.max_volatility = self.config.get('max_volatility', 0.03)  # 3%
         
-        # Volume imbalance for directional bias
-        self.imbalance_threshold = self.config.get('imbalance_threshold', 0.6)
+        # Position tracking (for spread capture logic)
+        self.in_position = False
+        self.position_direction = None
+        self.entry_spread = 0.0
+        self.entry_time = 0
         
-        # Recent trade tracking
-        self.price_history = deque(maxlen=20)
-        self.trade_history = deque(maxlen=20)
+        # Time decay
+        self.max_hold_seconds = self.config.get('max_hold_seconds', 120)
         
         # Cooldown
         self.last_signal_time = 0
         self.cooldown_seconds = self.config.get('cooldown_seconds', 45)
         
-        # Consecutive signals tracking
-        self.consecutive_signals = 0
-        self.last_signal_side = None
+        # Minimum volume
+        self.min_volume = self.config.get('min_volume', 500)
     
-    def calculate_spread_bps(self, data: MarketData) -> float:
-        """Calculate spread in basis points."""
-        if data.mid <= 0:
-            return 0
-        return ((data.ask - data.bid) / data.mid) * 10000
-    
-    def get_average_spread(self) -> float:
-        """Get average historical spread."""
-        if len(self.spread_history) < 10:
-            return 20  # Default 20 bps
-        return statistics.mean(list(self.spread_history)[-20:])
-    
-    def get_spread_std(self) -> float:
-        """Get spread standard deviation."""
-        if len(self.spread_history) < 10:
-            return 5
-        try:
-            return statistics.stdev(list(self.spread_history)[-20:])
-        except:
-            return 5
-    
-    def calculate_price_position(self, data: MarketData) -> float:
+    def calculate_spread_metrics(self, data: MarketData) -> dict:
         """
-        Calculate where price is within the spread.
-        Returns 0.0 at bid, 1.0 at ask, 0.5 at mid.
+        Calculate various spread metrics.
         """
-        spread = data.ask - data.bid
-        if spread <= 0:
-            return 0.5
+        spread = data.ask - data.bid if data.ask > data.bid else 0
+        mid = data.mid
+        spread_bps = (spread / mid * 10000) if mid > 0 else 0
         
-        position = (data.price - data.bid) / spread
-        return max(0, min(1, position))
+        self.spread_history.append(spread_bps)
+        
+        metrics = {
+            'current_spread': spread,
+            'current_bps': spread_bps,
+            'mid': mid,
+            'bid': data.bid,
+            'ask': data.ask
+        }
+        
+        # Calculate percentiles if we have enough history
+        if len(self.spread_history) >= 20:
+            spreads = sorted(self.spread_history)
+            metrics['median_spread'] = statistics.median(spreads)
+            metrics['p25'] = spreads[int(len(spreads) * 0.25)]
+            metrics['p75'] = spreads[int(len(spreads) * 0.75)]
+            metrics['p90'] = spreads[int(len(spreads) * 0.90)]
+            
+            # Current percentile
+            current = spread_bps
+            below_count = sum(1 for s in spreads if s < current)
+            metrics['current_percentile'] = below_count / len(spreads)
+        else:
+            metrics['median_spread'] = spread_bps
+            metrics['p25'] = spread_bps * 0.5
+            metrics['p75'] = spread_bps * 1.5
+            metrics['p90'] = spread_bps * 2.0
+            metrics['current_percentile'] = 0.5
+        
+        return metrics
     
-    def calculate_imbalance(self, data: MarketData) -> float:
-        """
-        Calculate order book imbalance.
-        Returns positive for bid-heavy, negative for ask-heavy.
-        """
-        if not data.order_book:
-            return 0.0
-        
-        bids = data.order_book.get('bids', [])
-        asks = data.order_book.get('asks', [])
-        
-        if not bids or not asks:
-            return 0.0
-        
-        bid_vol = sum(float(b.get('size', 0)) for b in bids[:5])
-        ask_vol = sum(float(a.get('size', 0)) for a in asks[:5])
-        
-        total = bid_vol + ask_vol
-        if total == 0:
-            return 0.0
-        
-        return (bid_vol - ask_vol) / total
-    
-    def detect_volatility_regime(self) -> str:
-        """Detect if we're in high or low volatility regime."""
+    def calculate_volatility(self) -> float:
+        """Calculate recent price volatility."""
         if len(self.price_history) < 10:
-            return "normal"
+            return 0.0
         
         prices = list(self.price_history)
         try:
-            volatility = statistics.stdev(prices) / statistics.mean(prices)
+            return statistics.stdev(prices) / statistics.mean(prices) if len(prices) > 1 else 0
         except:
-            return "normal"
+            return 0.0
+    
+    def detect_spread_opportunity(self, metrics: dict, data: MarketData) -> tuple:
+        """
+        Detect if current spread presents opportunity.
         
-        if volatility > 0.03:
-            return "high"
-        elif volatility < 0.01:
-            return "low"
-        return "normal"
+        Returns: (is_opportunity, direction, expected_edge)
+        """
+        spread_bps = metrics['current_bps']
+        percentile = metrics.get('current_percentile', 0.5)
+        
+        # Filter out extreme spreads (likely news/event)
+        if spread_bps > self.max_spread_bps:
+            return False, "neutral", 0.0
+        
+        # Need minimum spread to be worth it
+        if spread_bps < self.min_spread_bps:
+            return False, "neutral", 0.0
+        
+        # Check if spread is wide (opportunity to capture compression)
+        if percentile > self.wide_spread_threshold:
+            # Determine direction based on price position within spread
+            mid = metrics['mid']
+            price = data.price
+            
+            # If price near bid, market is selling (potential up)
+            # If price near ask, market is buying (potential down)
+            bid_distance = (price - metrics['bid']) / spread if spread > 0 else 0.5
+            
+            if bid_distance < 0.3:
+                # Price near bid - likely to bounce up
+                direction = "up"
+            elif bid_distance > 0.7:
+                # Price near ask - likely to bounce down
+                direction = "down"
+            else:
+                # Price near mid - need other signals
+                return False, "neutral", 0.0
+            
+            # Expected edge is half the spread (capturing spread compression)
+            expected_edge = spread_bps / 2
+            
+            return True, direction, expected_edge
+        
+        return False, "neutral", 0.0
     
     def generate_signal(self, data: MarketData) -> Optional[Signal]:
         current_time = data.timestamp
         
-        # Cooldown check
-        if current_time - self.last_signal_time < self.cooldown_seconds:
-            return None
-        
-        # Update histories
+        # Update history
         self.price_history.append(data.price)
         
         # Calculate spread metrics
-        spread_bps = self.calculate_spread_bps(data)
-        self.spread_history.append(spread_bps)
+        metrics = self.calculate_spread_metrics(data)
         
-        # Need enough spread history
-        if len(self.spread_history) < 10:
+        # Check volatility
+        volatility = self.calculate_volatility()
+        if volatility > self.max_volatility:
             return None
         
-        avg_spread = self.get_average_spread()
-        spread_std = self.get_spread_std()
-        
-        # Skip if spread is too small or too large
-        if spread_bps < self.min_spread_bps or spread_bps > self.max_spread_bps:
+        # Check volume if available
+        if hasattr(data, 'volume') and data.volume and data.volume < self.min_volume:
             return None
         
-        # Check if spread is abnormally wide
-        spread_ratio = spread_bps / avg_spread if avg_spread > 0 else 1.0
-        is_wide_spread = spread_ratio > self.spread_threshold_mult
+        # Detect opportunity
+        is_opp, direction, edge = self.detect_spread_opportunity(metrics, data)
         
-        # Calculate price position within spread
-        price_position = self.calculate_price_position(data)
-        near_mid = abs(price_position - 0.5) < self.mid_proximity_threshold
-        
-        # Calculate order book imbalance
-        imbalance = self.calculate_imbalance(data)
-        
-        # Get volatility regime
-        vol_regime = self.detect_volatility_regime()
-        
-        signal = None
-        confidence = 0.0
-        reason = ""
-        
-        # Wide spread opportunity
-        if is_wide_spread and near_mid:
-            # Wide spread + near mid = opportunity to capture spread narrowing
+        if is_opp:
+            # Cooldown check
+            if current_time - self.last_signal_time < self.cooldown_seconds:
+                return None
             
-            if imbalance > self.imbalance_threshold:
-                # Bid-heavy: expect price to move up, spread to narrow from ask side
-                confidence = min(0.60 + (spread_ratio - 1) * 0.1 + abs(imbalance) * 0.1, 0.80)
-                signal = "up"
-                reason = f"Wide spread {spread_bps:.0f}bps ({spread_ratio:.1f}x avg), bid-heavy {imbalance:.2f}"
+            # Calculate confidence based on spread percentile and edge
+            percentile = metrics.get('current_percentile', 0.5)
+            base_conf = 0.58
+            spread_boost = (percentile - self.wide_spread_threshold) * 0.3
+            edge_boost = min(edge / 100, 0.10)  # Edge in bps / 100
             
-            elif imbalance < -self.imbalance_threshold:
-                # Ask-heavy: expect price to move down, spread to narrow from bid side
-                confidence = min(0.60 + (spread_ratio - 1) * 0.1 + abs(imbalance) * 0.1, 0.80)
-                signal = "down"
-                reason = f"Wide spread {spread_bps:.0f}bps ({spread_ratio:.1f}x avg), ask-heavy {imbalance:.2f}"
+            confidence = min(base_conf + spread_boost + edge_boost, 0.82)
             
-            else:
-                # Balanced book but wide spread - fade the last move
-                if len(self.price_history) >= 5:
-                    recent = list(self.price_history)[-5:]
-                    short_term_move = recent[-1] - recent[0]
-                    
-                    if short_term_move > 0.005:  # Recent upward move
-                        # Expect pullback
-                        confidence = 0.60
-                        signal = "down"
-                        reason = f"Wide spread fade: {spread_bps:.0f}bps, recent up {short_term_move:.3f}"
-                    elif short_term_move < -0.005:  # Recent downward move
-                        # Expect bounce
-                        confidence = 0.60
-                        signal = "up"
-                        reason = f"Wide spread fade: {spread_bps:.0f}bps, recent down {abs(short_term_move):.3f}"
-        
-        # Normal spread but strong imbalance
-        elif abs(imbalance) > 0.7 and vol_regime != "high":
-            # Strong directional pressure with normal spread
-            if imbalance > 0:
-                confidence = min(0.60 + (imbalance - 0.7) * 0.3, 0.75)
-                signal = "up"
-                reason = f"Strong bid imbalance {imbalance:.2f}, spread normal {spread_bps:.0f}bps"
-            else:
-                confidence = min(0.60 + (abs(imbalance) - 0.7) * 0.3, 0.75)
-                signal = "down"
-                reason = f"Strong ask imbalance {abs(imbalance):.2f}, spread normal {spread_bps:.0f}bps"
-        
-        if signal and confidence >= self.min_confidence:
             self.last_signal_time = current_time
             
             return Signal(
                 strategy=self.name,
-                signal=signal,
+                signal=direction,
                 confidence=confidence,
-                reason=reason,
+                reason=f"Wide spread capture: {metrics['current_bps']:.1f}bps at P{percentile:.0%}, edge={edge:.1f}bps",
                 metadata={
-                    'spread_bps': spread_bps,
-                    'avg_spread_bps': avg_spread,
-                    'spread_ratio': spread_ratio,
-                    'price_position': price_position,
-                    'imbalance': imbalance,
-                    'vol_regime': vol_regime
+                    'spread_bps': metrics['current_bps'],
+                    'percentile': percentile,
+                    'expected_edge': edge,
+                    'median_spread': metrics.get('median_spread', 0),
+                    'volatility': volatility
                 }
             )
         

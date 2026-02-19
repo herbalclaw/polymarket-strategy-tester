@@ -70,6 +70,9 @@ from strategies.toxic_flow_detector import ToxicFlowDetectorStrategy
 from strategies.dual_class_arbitrage import DualClassArbitrageStrategy
 from strategies.no_farming import NoFarmingStrategy
 from strategies.high_probability_compounding import HighProbabilityCompoundingStrategy
+from strategies.inventory_skew import InventorySkewStrategy
+from strategies.adverse_selection_flow import AdverseSelectionFilterStrategy
+from strategies.spread_capture import SpreadCaptureStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -153,6 +156,9 @@ class PaperTrader:
             DualClassArbitrageStrategy(),  # NEW: YES+NO parity arbitrage
             NoFarmingStrategy(),  # NEW: Systematic NO farming exploiting long-shot bias
             HighProbabilityCompoundingStrategy(),  # NEW: High-probability auto-compounding
+            InventorySkewStrategy(),  # NEW: Exploit market maker inventory skewing
+            AdverseSelectionFilterStrategy(),  # NEW: Trade alongside informed flow
+            SpreadCaptureStrategy(),  # NEW: Capture spread compression profits
         ]
         
         # Register all strategies
