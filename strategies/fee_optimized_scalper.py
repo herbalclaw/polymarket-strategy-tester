@@ -39,6 +39,7 @@ class FeeOptimizedScalperStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price zones for trading (extremes only)
         self.long_threshold = self.config.get('long_threshold', 0.15)

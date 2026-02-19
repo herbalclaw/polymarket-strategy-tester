@@ -16,6 +16,7 @@ class SentimentStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.min_confidence = self.config.get('min_sentiment_confidence', 0.7)
         self.contrarian = self.config.get('contrarian', False)  # Bet against extreme sentiment
     

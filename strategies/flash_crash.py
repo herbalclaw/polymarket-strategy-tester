@@ -38,6 +38,7 @@ class FlashCrashStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Flash crash detection parameters
         self.drop_threshold = self.config.get('drop_threshold', 0.15)  # 15% drop

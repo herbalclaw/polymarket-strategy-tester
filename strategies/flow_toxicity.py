@@ -39,6 +39,7 @@ class FlowToxicityStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # VPIN calculation parameters
         self.volume_buckets = self.config.get('volume_buckets', 50)  # Number of volume buckets

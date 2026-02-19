@@ -37,6 +37,7 @@ class OrderBookSlopeStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book depth to analyze
         self.depth_levels = self.config.get('depth_levels', 10)

@@ -37,6 +37,7 @@ class TickSizeArbitrageStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Tick size thresholds
         self.tick_size_normal = self.config.get('tick_size_normal', 0.01)  # 1 cent

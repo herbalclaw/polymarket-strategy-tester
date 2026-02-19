@@ -31,6 +31,7 @@ class BreakoutMomentumStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         # Lookback period for range calculation
         self.lookback = self.config.get('lookback', 20)
         # Breakout threshold (% of range)

@@ -39,6 +39,7 @@ class AdverseSelectionFilterStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Trade flow tracking
         self.price_history = deque(maxlen=50)

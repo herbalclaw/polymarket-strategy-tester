@@ -18,6 +18,7 @@ class MomentumStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.price_history: deque = deque(maxlen=self.config.get('window', 10))
         self.short_window = self.config.get('short_window', 2)  # Reduced from 3
         self.long_window = self.config.get('long_window', 5)   # Reduced from 10

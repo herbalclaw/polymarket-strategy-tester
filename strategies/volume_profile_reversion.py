@@ -44,6 +44,7 @@ class VolumeProfileReversionStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Volume tracking
         self.volume_history = deque(maxlen=30)

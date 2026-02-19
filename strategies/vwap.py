@@ -16,6 +16,7 @@ class VWAPStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.deviation_threshold = self.config.get('deviation_threshold', 0.05)  # Reduced from 0.1
         self.max_deviation = self.config.get('max_deviation', 2.0)  # Increased from 1.0
     

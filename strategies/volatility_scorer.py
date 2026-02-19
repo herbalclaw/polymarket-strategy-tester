@@ -30,6 +30,7 @@ class VolatilityScorerStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         # Timeframes for volatility calculation (in data points)
         self.timeframes = self.config.get('timeframes', {
             'short': 20,    # ~3 hours at 5-min intervals

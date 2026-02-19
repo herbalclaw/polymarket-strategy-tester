@@ -41,6 +41,7 @@ class InventorySkewStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book analysis depth
         self.depth_levels = self.config.get('depth_levels', 5)

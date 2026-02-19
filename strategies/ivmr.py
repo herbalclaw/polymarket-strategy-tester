@@ -39,6 +39,7 @@ class IVMRStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Volatility calculation window
         self.vol_window = self.config.get('vol_window', 10)

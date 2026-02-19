@@ -44,6 +44,7 @@ class RangeBoundMeanReversionStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Range detection parameters
         self.lookback_periods = self.config.get('lookback_periods', 20)

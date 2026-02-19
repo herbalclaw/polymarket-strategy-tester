@@ -40,6 +40,7 @@ class VolumeWeightedMicropriceStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Depth levels for calculation
         self.depth_levels = self.config.get('depth_levels', 3)

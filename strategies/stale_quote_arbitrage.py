@@ -15,7 +15,7 @@ Edge: Capture mispricing when YES + NO < $1.00 (guaranteed profit at settlement)
 
 import numpy as np
 from typing import Dict, Any, Optional, Tuple
-from strategies.base_strategy import BaseStrategy
+from core.base_strategy import BaseStrategy
 
 
 class StaleQuoteArbitrage(BaseStrategy):
@@ -29,6 +29,7 @@ class StaleQuoteArbitrage(BaseStrategy):
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
+        config = config or {}
         self.name = "StaleQuoteArbitrage"
         self.description = "Exploits stale quotes when YES + NO ≠ $1.00"
         

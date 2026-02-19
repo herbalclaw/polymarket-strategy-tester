@@ -31,6 +31,7 @@ class TimeDecayStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Window timing (5 minute = 300 seconds)
         self.window_seconds = 300

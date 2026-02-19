@@ -31,6 +31,7 @@ class DualClassArbitrageStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.min_deviation = self.config.get('min_deviation', 0.005)  # 0.5%
         self.max_deviation = self.config.get('max_deviation', 0.05)   # 5%
         self.fee_estimate = self.config.get('fee_estimate', 0.015)    # 1.5%

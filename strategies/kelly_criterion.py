@@ -45,6 +45,7 @@ to calculate expected edge. Only enters when Kelly fraction
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price history for probability estimation
         self.price_history: deque = deque(maxlen=100)

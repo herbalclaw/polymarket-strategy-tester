@@ -32,6 +32,7 @@ class RetailSentimentFadeStrategy(BaseStrategy):
     
     def __init__(self, config: Dict = None):
         super().__init__(config)
+        config = config or {}
         self.price_history: List[float] = []
         self.max_history = 20
         

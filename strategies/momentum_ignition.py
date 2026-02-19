@@ -40,6 +40,7 @@ class MomentumIgnitionStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price tracking
         self.price_history = deque(maxlen=30)

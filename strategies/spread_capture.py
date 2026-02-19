@@ -40,6 +40,7 @@ class SpreadCaptureStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Spread tracking
         self.spread_history = deque(maxlen=50)

@@ -31,6 +31,7 @@ class SharpMoneyStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         # Window for tracking volume/price relationship
         self.window = self.config.get('window', 20)
         # Threshold for reverse line movement detection

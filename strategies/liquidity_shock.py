@@ -31,6 +31,7 @@ class LiquidityShockStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price and volume history
         self.price_history: deque = deque(maxlen=100)

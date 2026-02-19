@@ -44,7 +44,7 @@ from strategies.serial_correlation import SerialCorrelationStrategy
 from strategies.liquidity_shock import LiquidityShockStrategy
 from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 from strategies.volatility_expansion import VolatilityExpansionStrategy
-from strategies.informed_trader_flow import InformedTraderFlowStrategy
+from strategies.informed_trader_flow import InformedTraderFlow
 from strategies.contrarian_extreme import ContrarianExtremeStrategy
 from strategies.fee_optimized_scalper import FeeOptimizedScalperStrategy
 from strategies.tick_size_arbitrage import TickSizeArbitrageStrategy
@@ -65,7 +65,7 @@ from strategies.microprice_reversion import MicroPriceReversionStrategy
 from strategies.late_entry_momentum import LateEntryMomentumStrategy
 from strategies.smart_money_flow import SmartMoneyFlowStrategy
 from strategies.kelly_criterion import KellyCriterionStrategy
-from strategies.time_decay_alpha import TimeDecayAlphaStrategy
+from strategies.time_decay_alpha import TimeDecayAlpha
 from strategies.toxic_flow_detector import ToxicFlowDetectorStrategy
 from strategies.dual_class_arbitrage import DualClassArbitrageStrategy
 from strategies.no_farming import NoFarmingStrategy
@@ -79,7 +79,7 @@ from strategies.twap_detector import TWAPDetectorStrategy
 from strategies.retail_sentiment_fade import RetailSentimentFadeStrategy
 from strategies.implied_volatility_skew import ImpliedVolatilitySkewStrategy
 from strategies.funding_rate_arbitrage import TimeDecayArbitrageStrategy
-from strategies.stale_quote_arbitrage import StaleQuoteArbitrageStrategy
+from strategies.stale_quote_arbitrage import StaleQuoteArbitrage
 from strategies.volatility_clustering import VolatilityClusteringStrategy
 from strategies.layering_detection import LayeringDetectionStrategy
 from strategies.liquidity_reward_optimized import LiquidityRewardOptimizedStrategy
@@ -145,7 +145,7 @@ class PaperTrader:
             LiquidityShockStrategy(),  # NEW: Fade liquidity shocks
             OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance from LOB
             VolatilityExpansionStrategy(),  # NEW: Trade volatility expansion after compression
-            InformedTraderFlowStrategy(),  # NEW: Detect smart money through volume-price patterns
+            InformedTraderFlow(),  # NEW: Detect smart money through volume-price patterns
             ContrarianExtremeStrategy(),  # NEW: Fade price extremes exploiting retail overreaction
             FeeOptimizedScalperStrategy(),  # NEW: Fee-optimized scalping near price extremes
             TickSizeArbitrageStrategy(),  # NEW: Exploit tick-size regime changes
@@ -166,7 +166,7 @@ class PaperTrader:
             LateEntryMomentumStrategy(),  # NEW: Late-window momentum continuation
             SmartMoneyFlowStrategy(),  # NEW: Smart money flow detection
             KellyCriterionStrategy(),  # NEW: Kelly criterion optimal bet sizing
-            TimeDecayAlphaStrategy(),  # NEW: Exploit time decay in short-term markets
+            TimeDecayAlpha(),  # NEW: Exploit time decay in short-term markets
             ToxicFlowDetectorStrategy(),  # NEW: Detect and fade toxic order flow
             DualClassArbitrageStrategy(),  # NEW: YES+NO parity arbitrage
             NoFarmingStrategy(),  # NEW: Systematic NO farming exploiting long-shot bias
@@ -183,7 +183,7 @@ class PaperTrader:
             LiquidityRewardOptimizedStrategy(),  # NEW: Optimize for Polymarket liquidity rewards
             AsymmetricMomentumStrategy(),  # NEW: Exploit asymmetric momentum patterns
             VolumeProfileReversionStrategy(),  # NEW: Fade volume profile imbalances
-            StaleQuoteArbitrageStrategy(),  # NEW: Exploit stale quotes during rapid moves
+            StaleQuoteArbitrage(),  # NEW: Exploit stale quotes during rapid moves
             VolatilityClusteringStrategy(),  # NEW: Trade volatility clustering (GARCH-based)
             LayeringDetectionStrategy(),  # NEW: Detect and fade layering manipulation
             FlashCrashStrategy(),  # NEW: Capture flash crashes and volatility spikes

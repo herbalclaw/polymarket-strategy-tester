@@ -40,6 +40,7 @@ class SmartMoneyFlowStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book tracking
         self.bid_history = deque(maxlen=10)

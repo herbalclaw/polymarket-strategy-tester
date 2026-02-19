@@ -8,7 +8,7 @@ from .vwap import VWAPStrategy
 from .leadlag import LeadLagStrategy
 from .sentiment import SentimentStrategy
 from .volatility_expansion import VolatilityExpansionStrategy
-from .informed_trader_flow import InformedTraderFlowStrategy
+from .informed_trader_flow import InformedTraderFlow
 from .contrarian_extreme import ContrarianExtremeStrategy
 from .fee_optimized_scalper import FeeOptimizedScalperStrategy
 from .tick_size_arbitrage import TickSizeArbitrageStrategy
@@ -33,16 +33,13 @@ from .combinatorial_arbitrage import CombinatorialArbitrageStrategy
 from .twap_detector import TWAPDetectorStrategy
 from .retail_sentiment_fade import RetailSentimentFadeStrategy
 from .implied_volatility_skew import ImpliedVolatilitySkewStrategy
-from .funding_rate_arbitrage import FundingRateArbitrageStrategy
-from .stale_quote_arbitrage import StaleQuoteArbitrageStrategy
+from .funding_rate_arbitrage import TimeDecayArbitrageStrategy
+from .stale_quote_arbitrage import StaleQuoteArbitrage
 from .volatility_clustering import VolatilityClusteringStrategy
 from .layering_detection import LayeringDetectionStrategy
 from .flash_crash import FlashCrashStrategy
 from .flow_toxicity import FlowToxicityStrategy
 from .momentum_reversal import MomentumReversalStrategy
-from .time_decay_alpha import TimeDecayAlpha
-from .stale_quote_arbitrage import StaleQuoteArbitrage
-from .informed_trader_flow import InformedTraderFlow
 
 __all__ = [
     'MomentumStrategy',
@@ -51,7 +48,7 @@ __all__ = [
     'LeadLagStrategy',
     'SentimentStrategy',
     'VolatilityExpansionStrategy',
-    'InformedTraderFlowStrategy',
+    'InformedTraderFlow',
     'ContrarianExtremeStrategy',
     'FeeOptimizedScalperStrategy',
     'TickSizeArbitrageStrategy',
@@ -76,14 +73,12 @@ __all__ = [
     'TWAPDetectorStrategy',
     'RetailSentimentFadeStrategy',
     'ImpliedVolatilitySkewStrategy',
-    'FundingRateArbitrageStrategy',
-    'StaleQuoteArbitrageStrategy',
+    'TimeDecayArbitrageStrategy',
+    'StaleQuoteArbitrage',
     'VolatilityClusteringStrategy',
     'LayeringDetectionStrategy',
     'FlashCrashStrategy',
     'FlowToxicityStrategy',
     'MomentumReversalStrategy',
     'TimeDecayAlpha',
-    'StaleQuoteArbitrage', 
-    'InformedTraderFlow'
 ]

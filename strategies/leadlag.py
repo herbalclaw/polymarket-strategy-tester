@@ -17,6 +17,7 @@ class LeadLagStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.price_history: deque = deque(maxlen=self.config.get('history_size', 20))
         self.min_move_pct = self.config.get('min_move_pct', 0.02)  # Reduced from 0.05
     

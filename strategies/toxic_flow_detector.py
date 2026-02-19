@@ -44,6 +44,7 @@ class ToxicFlowDetectorStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book history for tracking changes
         self.ob_history: deque = deque(maxlen=50)

@@ -34,6 +34,7 @@ class OrderFlowImbalanceStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # OFI calculation parameters
         self.ofi_window = self.config.get('ofi_window', 10)  # Periods for smoothing

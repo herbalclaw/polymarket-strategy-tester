@@ -37,6 +37,7 @@ class PriceSkewStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Skew calculation
         self.skew_history: deque = deque(maxlen=100)

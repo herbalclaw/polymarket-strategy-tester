@@ -24,6 +24,7 @@ class LongshotBiasStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         # Favorites = price > 0.50 (implied probability > 50%)
         # But we want STRONG favorites with edge
         self.min_favorite_price = self.config.get('min_favorite_price', 0.60)  # 60%+ implied prob

@@ -34,6 +34,7 @@ class TimeWeightedMomentumStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Window parameters (5-minute BTC markets)
         self.window_seconds = self.config.get('window_seconds', 300)  # 5 min

@@ -52,6 +52,7 @@ class CombinatorialArbitrageStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Arbitrage thresholds
         self.min_arbitrage_bps = self.config.get('min_arbitrage_bps', 50)  # 0.5% minimum

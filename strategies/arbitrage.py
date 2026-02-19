@@ -17,6 +17,7 @@ class ArbitrageStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.min_arb_pct = self.config.get('min_arb_pct', 0.1)
         self.max_arb_pct = self.config.get('max_arb_pct', 1.0)
     

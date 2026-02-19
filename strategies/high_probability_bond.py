@@ -28,6 +28,7 @@ class HighProbabilityBondStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price extremes
         self.extreme_high = self.config.get('extreme_high', 0.90)  # 90%+

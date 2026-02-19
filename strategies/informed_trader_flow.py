@@ -17,7 +17,7 @@ Edge: Detect and follow informed trader flow before prices fully adjust.
 import numpy as np
 from typing import Dict, Any, Optional, List
 from collections import deque
-from strategies.base_strategy import BaseStrategy
+from core.base_strategy import BaseStrategy
 
 
 class InformedTraderFlow(BaseStrategy):
@@ -31,8 +31,12 @@ class InformedTraderFlow(BaseStrategy):
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
+        config = config or {}
         self.name = "InformedTraderFlow"
         self.description = "Detects and follows informed trader flow patterns"
+        
+        # Handle None config
+        config = config or {}
         
         # Strategy parameters
         self.flow_window = config.get('flow_window', 10)  # Trades to analyze

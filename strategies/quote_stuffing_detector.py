@@ -42,6 +42,7 @@ class QuoteStuffingDetectorStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book state tracking
         self.last_order_book: Optional[Dict] = None

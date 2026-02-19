@@ -37,6 +37,7 @@ class MicroPriceReversionStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Order book depth to consider
         self.depth_levels = self.config.get('depth_levels', 3)

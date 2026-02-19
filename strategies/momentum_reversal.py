@@ -40,6 +40,7 @@ class MomentumReversalStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Momentum detection parameters
         self.lookback_periods = self.config.get('lookback_periods', 10)

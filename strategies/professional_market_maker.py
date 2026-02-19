@@ -1,4 +1,4 @@
-from strategies.base_strategy import BaseStrategy
+from core.base_strategy import BaseStrategy
 import numpy as np
 from datetime import datetime, timedelta
 

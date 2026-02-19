@@ -44,6 +44,7 @@ class LiquidityRewardOptimizedStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Reward optimization parameters
         self.target_spread_bps = self.config.get('target_spread_bps', 20)  # Tight spread near mid

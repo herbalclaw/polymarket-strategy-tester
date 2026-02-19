@@ -35,6 +35,7 @@ class BollingerBandsStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Bollinger Bands parameters
         self.period = self.config.get('period', 20)

@@ -42,6 +42,7 @@ class AdverseSelectionFilterStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Trade size analysis
         self.trade_history = deque(maxlen=50)

@@ -33,6 +33,7 @@ class VolatilityExpansionStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price history for Bollinger Bands
         self.price_history: deque = deque(maxlen=50)

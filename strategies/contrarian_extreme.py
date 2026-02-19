@@ -41,6 +41,7 @@ class ContrarianExtremeStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Price history
         self.price_history: deque = deque(maxlen=50)

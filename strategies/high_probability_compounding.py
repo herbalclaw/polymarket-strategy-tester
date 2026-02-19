@@ -32,6 +32,7 @@ class HighProbabilityCompoundingStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.min_price = self.config.get('min_price', 0.85)
         self.max_price = self.config.get('max_price', 0.99)
         self.min_liquidity_score = self.config.get('min_liquidity_score', 0.3)

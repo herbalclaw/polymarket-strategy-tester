@@ -32,6 +32,7 @@ class NoFarmingStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         self.min_no_price = self.config.get('min_no_price', 0.60)  # Min NO implied price
         self.max_no_price = self.config.get('max_no_price', 0.95)  # Max NO implied price
         self.min_time_remaining = self.config.get('min_time_remaining', 60)  # seconds

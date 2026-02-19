@@ -32,6 +32,7 @@ class VPINStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # VPIN parameters
         self.bucket_size = self.config.get('bucket_size', 1000)  # Volume bucket size

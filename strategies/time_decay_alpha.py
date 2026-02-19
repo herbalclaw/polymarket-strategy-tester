@@ -15,7 +15,7 @@ Edge: Capture the decay of uncertainty premium as market approaches resolution.
 
 import numpy as np
 from typing import Dict, Any, Optional
-from strategies.base_strategy import BaseStrategy
+from core.base_strategy import BaseStrategy
 
 
 class TimeDecayAlpha(BaseStrategy):
@@ -29,6 +29,7 @@ class TimeDecayAlpha(BaseStrategy):
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
+        config = config or {}
         self.name = "TimeDecayAlpha"
         self.description = "Exploits time decay of uncertainty premium in short-term markets"
         

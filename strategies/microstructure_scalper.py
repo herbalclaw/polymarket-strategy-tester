@@ -24,6 +24,7 @@ class MicrostructureScalperStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         # Price history for micro-momentum
         self.price_history: deque = deque(maxlen=20)
         self.bid_ask_history: deque = deque(maxlen=10)

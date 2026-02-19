@@ -39,6 +39,7 @@ class GammaScalpStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Gamma zone definition (near 50 cents)
         self.gamma_center = self.config.get('gamma_center', 0.50)

@@ -38,6 +38,7 @@ class LateEntryMomentumStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Late window threshold (seconds before market close)
         self.late_window_seconds = self.config.get('late_window_seconds', 90)

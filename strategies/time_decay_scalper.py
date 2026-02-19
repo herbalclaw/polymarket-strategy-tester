@@ -45,6 +45,7 @@ class TimeDecayScalpingStrategy(BaseStrategy):
     
     def __init__(self, config: dict = None):
         super().__init__(config)
+        config = config or {}
         
         # Time thresholds (in seconds from window end)
         self.early_phase = self.config.get('early_phase', 180)      # >3 min
