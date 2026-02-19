@@ -64,6 +64,9 @@ from strategies.quote_stuffing_detector import QuoteStuffingDetectorStrategy
 from strategies.microprice_reversion import MicroPriceReversionStrategy
 from strategies.late_entry_momentum import LateEntryMomentumStrategy
 from strategies.smart_money_flow import SmartMoneyFlowStrategy
+from strategies.kelly_criterion import KellyCriterionStrategy
+from strategies.time_decay_alpha import TimeDecayAlphaStrategy
+from strategies.toxic_flow_detector import ToxicFlowDetectorStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,6 +144,9 @@ class PaperTrader:
             MicroPriceReversionStrategy(),  # NEW: Microprice deviation reversion alpha
             LateEntryMomentumStrategy(),  # NEW: Late-window momentum continuation
             SmartMoneyFlowStrategy(),  # NEW: Smart money flow detection
+            KellyCriterionStrategy(),  # NEW: Kelly criterion optimal bet sizing
+            TimeDecayAlphaStrategy(),  # NEW: Exploit time decay in short-term markets
+            ToxicFlowDetectorStrategy(),  # NEW: Detect and fade toxic order flow
         ]
         
         # Register all strategies
