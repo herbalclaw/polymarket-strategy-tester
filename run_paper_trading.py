@@ -40,6 +40,9 @@ from strategies.spread_capture import SpreadCaptureStrategy
 from strategies.vpin import VPINStrategy
 from strategies.time_weighted_momentum import TimeWeightedMomentumStrategy
 from strategies.price_skew import PriceSkewStrategy
+from strategies.serial_correlation import SerialCorrelationStrategy
+from strategies.liquidity_shock import LiquidityShockStrategy
+from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -93,6 +96,9 @@ class PaperTrader:
             VPINStrategy(),  # NEW: Volume-synchronized informed trading detection
             TimeWeightedMomentumStrategy(),  # NEW: Time-weighted momentum for 5-min windows
             PriceSkewStrategy(),  # NEW: YES/NO price skew sentiment detection
+            SerialCorrelationStrategy(),  # NEW: Mean reversion from serial correlation
+            LiquidityShockStrategy(),  # NEW: Fade liquidity shocks
+            OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance from LOB
         ]
         
         # Register all strategies
