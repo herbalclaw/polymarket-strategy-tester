@@ -73,6 +73,9 @@ from strategies.high_probability_compounding import HighProbabilityCompoundingSt
 from strategies.inventory_skew import InventorySkewStrategy
 from strategies.adverse_selection_flow import AdverseSelectionFilterStrategy
 from strategies.spread_capture import SpreadCaptureStrategy
+from strategies.latency_arbitrage import LatencyArbitrageStrategy
+from strategies.combinatorial_arbitrage import CombinatorialArbitrageStrategy
+from strategies.twap_detector import TWAPDetectorStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -159,6 +162,9 @@ class PaperTrader:
             InventorySkewStrategy(),  # NEW: Exploit market maker inventory skewing
             AdverseSelectionFilterStrategy(),  # NEW: Trade alongside informed flow
             SpreadCaptureStrategy(),  # NEW: Capture spread compression profits
+            LatencyArbitrageStrategy(),  # NEW: Exploit stale quotes during rapid moves
+            CombinatorialArbitrageStrategy(),  # NEW: Probability mispricing arbitrage
+            TWAPDetectorStrategy(),  # NEW: Detect and exploit institutional TWAP orders
         ]
         
         # Register all strategies

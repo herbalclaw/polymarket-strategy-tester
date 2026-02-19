@@ -28,6 +28,9 @@ from .smart_money_flow import SmartMoneyFlowStrategy
 from .dual_class_arbitrage import DualClassArbitrageStrategy
 from .no_farming import NoFarmingStrategy
 from .high_probability_compounding import HighProbabilityCompoundingStrategy
+from .latency_arbitrage import LatencyArbitrageStrategy
+from .combinatorial_arbitrage import CombinatorialArbitrageStrategy
+from .twap_detector import TWAPDetectorStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -55,5 +58,8 @@ __all__ = [
     'SmartMoneyFlowStrategy',
     'DualClassArbitrageStrategy',
     'NoFarmingStrategy',
-    'HighProbabilityCompoundingStrategy'
+    'HighProbabilityCompoundingStrategy',
+    'LatencyArbitrageStrategy',
+    'CombinatorialArbitrageStrategy',
+    'TWAPDetectorStrategy'
 ]
