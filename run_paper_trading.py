@@ -55,6 +55,9 @@ from strategies.spread_capture import SpreadCaptureStrategy
 from strategies.momentum_ignition import MomentumIgnitionStrategy
 from strategies.range_bound_mr import RangeBoundMeanReversionStrategy
 from strategies.liquidity_sweep import LiquiditySweepStrategy
+from strategies.volume_weighted_microprice import VolumeWeightedMicropriceStrategy
+from strategies.bid_ask_bounce import BidAskBounceStrategy
+from strategies.gamma_scalp import GammaScalpStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -123,6 +126,9 @@ class PaperTrader:
             MomentumIgnitionStrategy(),  # NEW: Trade momentum ignition and follow-through
             RangeBoundMeanReversionStrategy(),  # NEW: Mean reversion within identified price ranges
             LiquiditySweepStrategy(),  # NEW: Fade liquidity sweeps and capture reversals
+            VolumeWeightedMicropriceStrategy(),  # NEW: Volume-weighted microprice divergence alpha
+            BidAskBounceStrategy(),  # NEW: Trade bid-ask level bounces in CLOB
+            GammaScalpStrategy(),  # NEW: Gamma scalping near 50-cent high-sensitivity zone
         ]
         
         # Register all strategies

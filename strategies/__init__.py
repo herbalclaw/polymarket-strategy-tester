@@ -19,6 +19,9 @@ from .spread_capture import SpreadCaptureStrategy
 from .momentum_ignition import MomentumIgnitionStrategy
 from .range_bound_mr import RangeBoundMeanReversionStrategy
 from .liquidity_sweep import LiquiditySweepStrategy
+from .volume_weighted_microprice import VolumeWeightedMicropriceStrategy
+from .bid_ask_bounce import BidAskBounceStrategy
+from .gamma_scalp import GammaScalpStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -37,5 +40,8 @@ __all__ = [
     'SpreadCaptureStrategy',
     'MomentumIgnitionStrategy',
     'RangeBoundMeanReversionStrategy',
-    'LiquiditySweepStrategy'
+    'LiquiditySweepStrategy',
+    'VolumeWeightedMicropriceStrategy',
+    'BidAskBounceStrategy',
+    'GammaScalpStrategy'
 ]
