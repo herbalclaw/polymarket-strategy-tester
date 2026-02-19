@@ -58,6 +58,9 @@ from strategies.liquidity_sweep import LiquiditySweepStrategy
 from strategies.volume_weighted_microprice import VolumeWeightedMicropriceStrategy
 from strategies.bid_ask_bounce import BidAskBounceStrategy
 from strategies.gamma_scalp import GammaScalpStrategy
+from strategies.adverse_selection_filter import AdverseSelectionFilterStrategy
+from strategies.orderbook_slope import OrderBookSlopeStrategy
+from strategies.quote_stuffing_detector import QuoteStuffingDetectorStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,6 +132,9 @@ class PaperTrader:
             VolumeWeightedMicropriceStrategy(),  # NEW: Volume-weighted microprice divergence alpha
             BidAskBounceStrategy(),  # NEW: Trade bid-ask level bounces in CLOB
             GammaScalpStrategy(),  # NEW: Gamma scalping near 50-cent high-sensitivity zone
+            AdverseSelectionFilterStrategy(),  # NEW: Filter based on adverse selection risk
+            OrderBookSlopeStrategy(),  # NEW: Order book slope and depth analysis
+            QuoteStuffingDetectorStrategy(),  # NEW: Detect and exploit quote stuffing manipulation
         ]
         
         # Register all strategies
