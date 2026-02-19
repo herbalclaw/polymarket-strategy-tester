@@ -88,6 +88,9 @@ from strategies.volume_profile_reversion import VolumeProfileReversionStrategy
 from strategies.flash_crash import FlashCrashStrategy
 from strategies.flow_toxicity import FlowToxicityStrategy
 from strategies.momentum_reversal import MomentumReversalStrategy
+from strategies.probability_constraint_arbitrage import ProbabilityConstraintArbitrage
+from strategies.information_divergence import InformationDivergenceStrategy
+from strategies.time_weighted_microstructure import TimeWeightedMicrostructureStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,6 +192,9 @@ class PaperTrader:
             FlashCrashStrategy(),  # NEW: Capture flash crashes and volatility spikes
             FlowToxicityStrategy(),  # NEW: VPIN-based order flow toxicity detection
             MomentumReversalStrategy(),  # NEW: Momentum exhaustion reversal detection
+            ProbabilityConstraintArbitrage(),  # NEW: Exploit probability constraint violations
+            InformationDivergenceStrategy(),  # NEW: Bayesian information divergence alpha
+            TimeWeightedMicrostructureStrategy(),  # NEW: Time-weighted microstructure and VPIN
         ]
         
         # Register all strategies

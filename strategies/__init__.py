@@ -40,6 +40,9 @@ from .layering_detection import LayeringDetectionStrategy
 from .flash_crash import FlashCrashStrategy
 from .flow_toxicity import FlowToxicityStrategy
 from .momentum_reversal import MomentumReversalStrategy
+from .probability_constraint_arbitrage import ProbabilityConstraintArbitrage
+from .information_divergence import InformationDivergenceStrategy
+from .time_weighted_microstructure import TimeWeightedMicrostructureStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -80,5 +83,7 @@ __all__ = [
     'FlashCrashStrategy',
     'FlowToxicityStrategy',
     'MomentumReversalStrategy',
-    'TimeDecayAlpha',
+    'ProbabilityConstraintArbitrage',
+    'InformationDivergenceStrategy',
+    'TimeWeightedMicrostructureStrategy',
 ]
