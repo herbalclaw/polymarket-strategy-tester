@@ -79,6 +79,9 @@ from strategies.twap_detector import TWAPDetectorStrategy
 from strategies.retail_sentiment_fade import RetailSentimentFadeStrategy
 from strategies.implied_volatility_skew import ImpliedVolatilitySkewStrategy
 from strategies.funding_rate_arbitrage import FundingRateArbitrageStrategy
+from strategies.stale_quote_arbitrage import StaleQuoteArbitrageStrategy
+from strategies.volatility_clustering import VolatilityClusteringStrategy
+from strategies.layering_detection import LayeringDetectionStrategy
 from strategies.liquidity_reward_optimized import LiquidityRewardOptimizedStrategy
 from strategies.asymmetric_momentum import AsymmetricMomentumStrategy
 from strategies.volume_profile_reversion import VolumeProfileReversionStrategy
@@ -177,6 +180,9 @@ class PaperTrader:
             LiquidityRewardOptimizedStrategy(),  # NEW: Optimize for Polymarket liquidity rewards
             AsymmetricMomentumStrategy(),  # NEW: Exploit asymmetric momentum patterns
             VolumeProfileReversionStrategy(),  # NEW: Fade volume profile imbalances
+            StaleQuoteArbitrageStrategy(),  # NEW: Exploit stale quotes during rapid moves
+            VolatilityClusteringStrategy(),  # NEW: Trade volatility clustering (GARCH-based)
+            LayeringDetectionStrategy(),  # NEW: Detect and fade layering manipulation
         ]
         
         # Register all strategies

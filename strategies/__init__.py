@@ -34,6 +34,9 @@ from .twap_detector import TWAPDetectorStrategy
 from .retail_sentiment_fade import RetailSentimentFadeStrategy
 from .implied_volatility_skew import ImpliedVolatilitySkewStrategy
 from .funding_rate_arbitrage import FundingRateArbitrageStrategy
+from .stale_quote_arbitrage import StaleQuoteArbitrageStrategy
+from .volatility_clustering import VolatilityClusteringStrategy
+from .layering_detection import LayeringDetectionStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -67,5 +70,8 @@ __all__ = [
     'TWAPDetectorStrategy',
     'RetailSentimentFadeStrategy',
     'ImpliedVolatilitySkewStrategy',
-    'FundingRateArbitrageStrategy'
+    'FundingRateArbitrageStrategy',
+    'StaleQuoteArbitrageStrategy',
+    'VolatilityClusteringStrategy',
+    'LayeringDetectionStrategy'
 ]
