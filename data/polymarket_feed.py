@@ -53,16 +53,20 @@ class PolymarketDataFeed:
         import glob
         import os
         
-        # Find all database files
-        db_pattern = f"{self.data_collector_path}/data/raw/btc_hf_*.db"
+        # Find all database files (new naming: btc5min_*.db)
+        db_pattern = f"{self.data_collector_path}/data/raw/btc5min_*.db"
         db_files = glob.glob(db_pattern)
+        
+        if not db_files:
+            # Fallback to old naming pattern for compatibility
+            db_pattern = f"{self.data_collector_path}/data/raw/btc_hf_*.db"
+            db_files = glob.glob(db_pattern)
         
         if not db_files:
             # Fallback to UTC-based path if no files exist
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
-            period = "AM" if now.hour < 12 else "PM"
-            return f"{self.data_collector_path}/data/raw/btc_hf_{now:%Y-%m-%d}_{period}.db"
+            return f"{self.data_collector_path}/data/raw/btc5min_{now:%Y-%m-%d_%H00}.db"
         
         # Return most recently modified file
         return max(db_files, key=os.path.getmtime)
@@ -250,31 +254,36 @@ class PolymarketDataFeed:
         return False
     
     def get_latest_price(self) -> Optional[PolymarketPrice]:
-        """Get latest price from database (CLOB API returns fake 0.01/0.99 prices)."""
+        """Get latest price from database."""
         # Try to read from database first
         if self._ensure_connection():
             try:
                 cursor = self.conn.cursor()
-                # Get latest price update from database
+                # Get latest price update from database (using correct column names)
                 cursor.execute('''
-                    SELECT timestamp_ms, bid, ask, mid, spread_bps, bid_depth, ask_depth
+                    SELECT timestamp_ms, yes_bid, yes_ask, no_bid, no_ask
                     FROM price_updates
                     ORDER BY timestamp_ms DESC
                     LIMIT 1
                 ''')
                 row = cursor.fetchone()
                 if row:
-                    ts_ms, bid, ask, mid, spread_bps, bid_depth, ask_depth = row
-                    # Scale from integer (1M = 1.0)
+                    ts_ms, yes_bid, yes_ask, no_bid, no_ask = row
+                    # Calculate mid price from YES side
+                    bid = yes_bid if yes_bid else 0
+                    ask = yes_ask if yes_ask else 1
+                    mid = (bid + ask) / 2
+                    spread_bps = int((ask - bid) * 10000)
+                    
                     price = PolymarketPrice(
                         timestamp_ms=ts_ms,
-                        bid=bid / 1_000_000,
-                        ask=ask / 1_000_000,
-                        mid=mid / 1_000_000,
-                        vwap=mid / 1_000_000,
+                        bid=bid,
+                        ask=ask,
+                        mid=mid,
+                        vwap=mid,
                         spread_bps=spread_bps,
-                        bid_depth=bid_depth or 0,
-                        ask_depth=ask_depth or 0
+                        bid_depth=0,
+                        ask_depth=0
                     )
                     self.last_price = price
                     return price
