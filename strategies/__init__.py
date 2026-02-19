@@ -31,6 +31,9 @@ from .high_probability_compounding import HighProbabilityCompoundingStrategy
 from .latency_arbitrage import LatencyArbitrageStrategy
 from .combinatorial_arbitrage import CombinatorialArbitrageStrategy
 from .twap_detector import TWAPDetectorStrategy
+from .retail_sentiment_fade import RetailSentimentFadeStrategy
+from .implied_volatility_skew import ImpliedVolatilitySkewStrategy
+from .funding_rate_arbitrage import FundingRateArbitrageStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -61,5 +64,8 @@ __all__ = [
     'HighProbabilityCompoundingStrategy',
     'LatencyArbitrageStrategy',
     'CombinatorialArbitrageStrategy',
-    'TWAPDetectorStrategy'
+    'TWAPDetectorStrategy',
+    'RetailSentimentFadeStrategy',
+    'ImpliedVolatilitySkewStrategy',
+    'FundingRateArbitrageStrategy'
 ]

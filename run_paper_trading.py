@@ -76,6 +76,9 @@ from strategies.spread_capture import SpreadCaptureStrategy
 from strategies.latency_arbitrage import LatencyArbitrageStrategy
 from strategies.combinatorial_arbitrage import CombinatorialArbitrageStrategy
 from strategies.twap_detector import TWAPDetectorStrategy
+from strategies.retail_sentiment_fade import RetailSentimentFadeStrategy
+from strategies.implied_volatility_skew import ImpliedVolatilitySkewStrategy
+from strategies.funding_rate_arbitrage import FundingRateArbitrageStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -165,6 +168,9 @@ class PaperTrader:
             LatencyArbitrageStrategy(),  # NEW: Exploit stale quotes during rapid moves
             CombinatorialArbitrageStrategy(),  # NEW: Probability mispricing arbitrage
             TWAPDetectorStrategy(),  # NEW: Detect and exploit institutional TWAP orders
+            RetailSentimentFadeStrategy(),  # NEW: Fade retail overreaction extremes
+            ImpliedVolatilitySkewStrategy(),  # NEW: Exploit volatility skew asymmetry
+            FundingRateArbitrageStrategy(),  # NEW: Time-premium and drift arbitrage
         ]
         
         # Register all strategies
