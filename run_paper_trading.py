@@ -49,6 +49,9 @@ from strategies.contrarian_extreme import ContrarianExtremeStrategy
 from strategies.fee_optimized_scalper import FeeOptimizedScalperStrategy
 from strategies.tick_size_arbitrage import TickSizeArbitrageStrategy
 from strategies.ivmr import IVMRStrategy
+from strategies.orderbook_imbalance import OrderBookImbalanceStrategy
+from strategies.time_decay_scalper import TimeDecayScalpingStrategy
+from strategies.spread_capture import SpreadCaptureStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -111,6 +114,9 @@ class PaperTrader:
             FeeOptimizedScalperStrategy(),  # NEW: Fee-optimized scalping near price extremes
             TickSizeArbitrageStrategy(),  # NEW: Exploit tick-size regime changes
             IVMRStrategy(),  # NEW: Implied Volatility Mean Reversion
+            OrderBookImbalanceStrategy(),  # NEW: Order book imbalance microstructure alpha
+            TimeDecayScalpingStrategy(),  # NEW: Exploits time decay in short-term prediction markets
+            SpreadCaptureStrategy(),  # NEW: Capture bid-ask spread micro-inefficiencies
         ]
         
         # Register all strategies

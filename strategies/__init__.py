@@ -13,6 +13,9 @@ from .contrarian_extreme import ContrarianExtremeStrategy
 from .fee_optimized_scalper import FeeOptimizedScalperStrategy
 from .tick_size_arbitrage import TickSizeArbitrageStrategy
 from .ivmr import IVMRStrategy
+from .orderbook_imbalance import OrderBookImbalanceStrategy
+from .time_decay_scalper import TimeDecayScalpingStrategy
+from .spread_capture import SpreadCaptureStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -25,5 +28,8 @@ __all__ = [
     'ContrarianExtremeStrategy',
     'FeeOptimizedScalperStrategy',
     'TickSizeArbitrageStrategy',
-    'IVMRStrategy'
+    'IVMRStrategy',
+    'OrderBookImbalanceStrategy',
+    'TimeDecayScalpingStrategy',
+    'SpreadCaptureStrategy'
 ]
