@@ -61,6 +61,9 @@ from strategies.gamma_scalp import GammaScalpStrategy
 from strategies.adverse_selection_filter import AdverseSelectionFilterStrategy
 from strategies.orderbook_slope import OrderBookSlopeStrategy
 from strategies.quote_stuffing_detector import QuoteStuffingDetectorStrategy
+from strategies.microprice_reversion import MicroPriceReversionStrategy
+from strategies.late_entry_momentum import LateEntryMomentumStrategy
+from strategies.smart_money_flow import SmartMoneyFlowStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,6 +138,9 @@ class PaperTrader:
             AdverseSelectionFilterStrategy(),  # NEW: Filter based on adverse selection risk
             OrderBookSlopeStrategy(),  # NEW: Order book slope and depth analysis
             QuoteStuffingDetectorStrategy(),  # NEW: Detect and exploit quote stuffing manipulation
+            MicroPriceReversionStrategy(),  # NEW: Microprice deviation reversion alpha
+            LateEntryMomentumStrategy(),  # NEW: Late-window momentum continuation
+            SmartMoneyFlowStrategy(),  # NEW: Smart money flow detection
         ]
         
         # Register all strategies

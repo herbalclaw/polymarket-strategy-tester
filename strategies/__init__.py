@@ -22,6 +22,9 @@ from .liquidity_sweep import LiquiditySweepStrategy
 from .volume_weighted_microprice import VolumeWeightedMicropriceStrategy
 from .bid_ask_bounce import BidAskBounceStrategy
 from .gamma_scalp import GammaScalpStrategy
+from .microprice_reversion import MicroPriceReversionStrategy
+from .late_entry_momentum import LateEntryMomentumStrategy
+from .smart_money_flow import SmartMoneyFlowStrategy
 
 __all__ = [
     'MomentumStrategy',
@@ -43,5 +46,8 @@ __all__ = [
     'LiquiditySweepStrategy',
     'VolumeWeightedMicropriceStrategy',
     'BidAskBounceStrategy',
-    'GammaScalpStrategy'
+    'GammaScalpStrategy',
+    'MicroPriceReversionStrategy',
+    'LateEntryMomentumStrategy',
+    'SmartMoneyFlowStrategy'
 ]
