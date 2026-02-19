@@ -1,333 +1,204 @@
 """
-TimeDecayAlpha Strategy
+TimeDecayAlpha Strategy for Polymarket BTC 5-Minute Markets
 
-Exploits time decay in short-term prediction markets.
-As settlement approaches, binary options exhibit increasing gamma -
-small probability shifts cause exponential price volatility.
+This strategy exploits the time decay of uncertainty premium in prediction markets.
+As markets approach resolution, the uncertainty premium decays, creating predictable
+price movements toward the true probability.
 
-Key insight: Professional traders reduce exposure as settlement approaches
-to avoid terminal volatility. This creates opportunities for those who
-understand the time-decay dynamics.
+Research Basis:
+- Markets far from resolution often misprice due to uncertainty premium
+- Time decay creates alpha as uncertainty resolves
+- Short-term markets (5-min) have accelerated decay patterns
 
-Time-to-Settlement Effect:
-Gamma(T) ∝ 1/√(T_remaining)
-
-Strategy reduces position sizing as settlement approaches and looks for
-mean-reversion opportunities in the final minutes when retail traders
-panic or overreact.
-
-Reference: "Mathematical Execution Behind Prediction Market Alpha" - Bawa (2025)
+Edge: Capture the decay of uncertainty premium as market approaches resolution.
 """
 
-import time
-import math
-from typing import Optional
-from collections import deque
-from statistics import mean, stdev
-
-from core.base_strategy import BaseStrategy, Signal, MarketData
+import numpy as np
+from typing import Dict, Any, Optional
+from strategies.base_strategy import BaseStrategy
 
 
-class TimeDecayAlphaStrategy(BaseStrategy):
+class TimeDecayAlpha(BaseStrategy):
     """
-    Exploit time decay dynamics in short-term prediction markets.
+    Strategy that exploits time decay of uncertainty premium.
     
-    Key principles:
-    1. Gamma increases as settlement approaches (price more sensitive to prob changes)
-    2. Retail traders often panic in final minutes, creating mean-reversion opportunities
-    3. Reduce exposure as T → 0 to avoid terminal volatility
-    
-    Strategy:
-    - In early window (>3 min remaining): Trade momentum/trend normally
-    - In mid window (1-3 min): Look for mean reversion after large moves
-    - In late window (<1 min): Only fade extreme overreactions
+    In prediction markets, prices often contain an uncertainty premium that
+    decays as the resolution time approaches. This strategy identifies when
+    the decay creates mispricing opportunities.
     """
     
-    name = "TimeDecayAlpha"
-    description = "Exploit time decay and terminal volatility patterns"
-    
-    def __init__(self, config: dict = None):
+    def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
+        self.name = "TimeDecayAlpha"
+        self.description = "Exploits time decay of uncertainty premium in short-term markets"
         
-        # Window timing (5-minute windows)
-        self.window_seconds = self.config.get('window_seconds', 300)
+        # Strategy parameters
+        self.time_threshold = config.get('time_threshold', 60)  # Seconds before close to activate
+        self.decay_rate_threshold = config.get('decay_rate_threshold', 0.02)  # Min decay rate
+        self.confidence_threshold = config.get('confidence_threshold', 0.65)  # Min confidence
+        self.position_size = config.get('position_size', 1.0)
         
-        # Time thresholds
-        self.early_threshold = self.config.get('early_threshold', 180)  # >3 min
-        self.mid_threshold = self.config.get('mid_threshold', 60)  # 1-3 min
-        # <1 min = late
+        # State tracking
+        self.price_history = []
+        self.time_history = []
+        self.max_history = 20
         
-        # Price history for volatility calculation
-        self.price_history: deque = deque(maxlen=100)
-        self.returns_history: deque = deque(maxlen=50)
-        
-        # Mean reversion parameters
-        self.reversion_lookback = self.config.get('reversion_lookback', 10)
-        self.reversion_threshold = self.config.get('reversion_threshold', 0.015)  # 1.5% move
-        
-        # Late window extreme move threshold
-        self.extreme_move_threshold = self.config.get('extreme_move_threshold', 0.03)  # 3%
-        
-        # Volatility tracking
-        self.volatility_window = self.config.get('volatility_window', 20)
-        
-        # Confidence scaling by time phase
-        self.early_confidence_boost = self.config.get('early_confidence_boost', 0.0)
-        self.mid_confidence_boost = self.config.get('mid_confidence_boost', 0.05)
-        self.late_confidence_boost = self.config.get('late_confidence_boost', 0.10)
-        
-        # Cooldown
-        self.cooldown_periods = self.config.get('cooldown_periods', 5)
-        self.last_signal_period = -self.cooldown_periods
-        self.period_count = 0
-        
-        # Track window start
-        self.current_window = None
-        self.window_start_time = None
-    
-    def get_time_in_window(self) -> float:
-        """Get seconds elapsed in current 5-minute window."""
-        now = time.time()
-        return now % self.window_seconds
-    
-    def get_time_remaining(self) -> float:
-        """Get seconds remaining in current window."""
-        return self.window_seconds - self.get_time_in_window()
-    
-    def get_time_phase(self) -> str:
-        """
-        Determine which phase of the window we're in.
-        
-        Returns: 'early', 'mid', or 'late'
-        """
-        remaining = self.get_time_remaining()
-        
-        if remaining > self.early_threshold:
-            return 'early'
-        elif remaining > self.mid_threshold:
-            return 'mid'
-        else:
-            return 'late'
-    
-    def calculate_gamma_exposure(self) -> float:
-        """
-        Estimate gamma exposure based on time remaining.
-        Gamma ∝ 1/√(T_remaining)
-        """
-        remaining = self.get_time_remaining()
-        if remaining <= 0:
-            return float('inf')
-        
-        # Normalize: at 300s, gamma = 1; at 1s, gamma = ~17
-        gamma = math.sqrt(self.window_seconds / remaining)
-        return gamma
-    
-    def calculate_position_scale(self) -> float:
-        """
-        Calculate position size scaling based on time.
-        Reduce exposure as settlement approaches.
-        """
-        remaining = self.get_time_remaining()
-        
-        # Linear scaling: full size at 300s, 30% at 0s
-        scale = max(0.3, remaining / self.window_seconds)
-        return scale
-    
-    def detect_mean_reversion_opportunity(self, current_price: float) -> tuple:
-        """
-        Detect if current price presents mean reversion opportunity.
-        
-        Returns: (is_opportunity, direction, strength)
-        """
-        if len(self.price_history) < self.reversion_lookback:
-            return False, "neutral", 0
-        
-        prices = list(self.price_history)
-        
-        # Calculate short-term moving average
-        ma = mean(prices[-self.reversion_lookback:])
-        
-        # Calculate deviation from mean
-        deviation = (current_price - ma) / ma if ma > 0 else 0
-        
-        # Check if move is significant
-        if abs(deviation) < self.reversion_threshold:
-            return False, "neutral", 0
-        
-        # Direction: if price is above mean, expect reversion down (fade the move)
-        # But for binary options, we need to think about this differently
-        # If price spiked UP (deviation > 0), probability may be overestimated
-        # Signal should be DOWN (bet against the spike)
-        direction = "down" if deviation > 0 else "up"
-        
-        # Strength based on deviation magnitude
-        strength = min(abs(deviation) / self.reversion_threshold, 2.0)
-        
-        return True, direction, strength
-    
-    def detect_extreme_overreaction(self, current_price: float) -> tuple:
-        """
-        Detect extreme overreaction in late window.
-        
-        Returns: (is_extreme, direction, strength)
-        """
+    def calculate_decay_rate(self) -> float:
+        """Calculate the rate of price decay toward extremes."""
         if len(self.price_history) < 5:
-            return False, "neutral", 0
+            return 0.0
         
-        prices = list(self.price_history)
+        # Calculate exponential decay rate
+        recent_prices = np.array(self.price_history[-5:])
+        times = np.arange(len(recent_prices))
         
-        # Calculate very short-term change
-        recent_change = (current_price - prices[-5]) / prices[-5] if prices[-5] > 0 else 0
-        
-        if abs(recent_change) < self.extreme_move_threshold:
-            return False, "neutral", 0
-        
-        # Fade the extreme move
-        direction = "down" if recent_change > 0 else "up"
-        strength = min(abs(recent_change) / self.extreme_move_threshold, 3.0)
-        
-        return True, direction, strength
-    
-    def calculate_volatility_regime(self) -> tuple:
-        """
-        Calculate current volatility regime.
-        
-        Returns: (current_vol, avg_vol, regime)
-        regime: 'low', 'normal', 'high'
-        """
-        if len(self.returns_history) < self.volatility_window:
-            return 0, 0, 'normal'
-        
-        returns = list(self.returns_history)[-self.volatility_window:]
-        
+        # Fit exponential decay: price = a * exp(-b * t) + c
         try:
-            current_vol = stdev(returns[-5:]) if len(returns) >= 5 else stdev(returns)
-            avg_vol = stdev(returns)
+            # Simple linear approximation of log-transformed prices
+            log_prices = np.log(recent_prices + 0.01)  # Add small constant to avoid log(0)
+            slope = np.polyfit(times, log_prices, 1)[0]
+            return abs(slope)
         except:
-            return 0, 0, 'normal'
-        
-        if avg_vol == 0:
-            return current_vol, avg_vol, 'normal'
-        
-        vol_ratio = current_vol / avg_vol
-        
-        if vol_ratio < 0.7:
-            regime = 'low'
-        elif vol_ratio > 1.3:
-            regime = 'high'
-        else:
-            regime = 'normal'
-        
-        return current_vol, avg_vol, regime
+            return 0.0
     
-    def generate_signal(self, data: MarketData) -> Optional[Signal]:
-        current_price = data.price
-        self.period_count += 1
+    def estimate_true_probability(self, current_price: float, time_to_close: float) -> float:
+        """
+        Estimate true probability by adjusting for time decay.
+        
+        As t -> 0, price should converge to 0 or 1.
+        Current price reflects: true_prob + uncertainty_premium * f(time)
+        """
+        if time_to_close <= 0:
+            return current_price
+        
+        # Uncertainty premium decays with time
+        # Higher time_to_close = higher uncertainty premium
+        decay_factor = np.exp(-self.decay_rate_threshold * (300 - time_to_close) / 60)
+        
+        # Adjust price by removing estimated uncertainty premium
+        if current_price > 0.5:
+            # Price inflated by uncertainty
+            true_prob = current_price - (current_price - 0.5) * decay_factor * 0.1
+        else:
+            # Price deflated by uncertainty  
+            true_prob = current_price + (0.5 - current_price) * decay_factor * 0.1
+        
+        return np.clip(true_prob, 0.01, 0.99)
+    
+    def generate_signal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Generate trading signal based on time decay analysis.
+        
+        Args:
+            data: Market data including price, time_to_close, orderbook
+            
+        Returns:
+            Signal dict or None
+        """
+        current_price = data.get('price', 0.5)
+        time_to_close = data.get('time_to_close', 300)
         
         # Update history
         self.price_history.append(current_price)
+        self.time_history.append(time_to_close)
         
-        if len(self.price_history) >= 2:
-            prev = list(self.price_history)[-2]
-            if prev > 0:
-                ret = (current_price - prev) / prev
-                self.returns_history.append(ret)
+        if len(self.price_history) > self.max_history:
+            self.price_history.pop(0)
+            self.time_history.pop(0)
         
-        # Check cooldown
-        if self.period_count - self.last_signal_period < self.cooldown_periods:
+        # Only trade near market close
+        if time_to_close > self.time_threshold:
             return None
         
-        # Need minimum data
-        if len(self.price_history) < 20:
+        # Need sufficient history
+        if len(self.price_history) < 5:
             return None
         
-        # Get time phase
-        phase = self.get_time_phase()
-        remaining = self.get_time_remaining()
-        gamma = self.calculate_gamma_exposure()
+        # Calculate decay rate
+        decay_rate = self.calculate_decay_rate()
         
-        # Get volatility regime
-        current_vol, avg_vol, vol_regime = self.calculate_volatility_regime()
+        if decay_rate < self.decay_rate_threshold:
+            return None
         
-        signal = None
-        confidence = 0.0
-        reason = ""
-        metadata = {}
+        # Estimate true probability
+        true_prob = self.estimate_true_probability(current_price, time_to_close)
         
-        if phase == 'early':
-            # Early window: trade trend/momentum normally
-            # Look for sustained directional movement
-            if len(self.price_history) >= 10:
-                early_mean = mean(list(self.price_history)[:10])
-                recent_mean = mean(list(self.price_history)[-10:])
-                
-                if early_mean > 0:
-                    trend = (recent_mean - early_mean) / early_mean
-                    
-                    if abs(trend) > 0.01:  # 1% trend
-                        signal = "up" if trend > 0 else "down"
-                        confidence = 0.60 + min(abs(trend) * 10, 0.15)
-                        reason = f"Early trend: {trend:.2%} (remaining: {remaining:.0f}s)"
-                        metadata = {
-                            'phase': phase,
-                            'trend': trend,
-                            'remaining': remaining,
-                            'gamma': gamma
-                        }
+        # Calculate edge
+        edge = abs(true_prob - current_price)
         
-        elif phase == 'mid':
-            # Mid window: look for mean reversion after significant moves
-            is_reversion, direction, strength = self.detect_mean_reversion_opportunity(current_price)
-            
-            if is_reversion and strength > 1.0:
-                signal = direction
-                base_conf = 0.62
-                strength_boost = min((strength - 1) * 0.08, 0.12)
-                phase_boost = self.mid_confidence_boost
-                
-                confidence = base_conf + strength_boost + phase_boost
-                confidence = min(confidence, 0.85)
-                
-                reason = f"Mid-window mean reversion: {direction} (strength: {strength:.2f}, remaining: {remaining:.0f}s)"
-                metadata = {
-                    'phase': phase,
-                    'reversion_strength': strength,
-                    'remaining': remaining,
-                    'gamma': gamma,
-                    'vol_regime': vol_regime
-                }
-        
-        else:  # late
-            # Late window: only fade extreme overreactions
-            is_extreme, direction, strength = self.detect_extreme_overreaction(current_price)
-            
-            if is_extreme and strength > 1.5:
-                signal = direction
-                base_conf = 0.65  # Higher base for late window (stronger conviction needed)
-                strength_boost = min((strength - 1.5) * 0.1, 0.15)
-                phase_boost = self.late_confidence_boost
-                
-                confidence = base_conf + strength_boost + phase_boost
-                confidence = min(confidence, 0.88)
-                
-                reason = f"Late fade extreme: {direction} (strength: {strength:.2f}, remaining: {remaining:.0f}s)"
-                metadata = {
-                    'phase': phase,
-                    'extreme_strength': strength,
-                    'remaining': remaining,
-                    'gamma': gamma,
-                    'position_scale': self.calculate_position_scale()
-                }
-        
-        if signal and confidence >= self.min_confidence:
-            self.last_signal_period = self.period_count
-            
-            return Signal(
-                strategy=self.name,
-                signal=signal,
-                confidence=confidence,
-                reason=reason,
-                metadata=metadata
-            )
+        # Generate signal if edge is significant
+        if edge > 0.05 and true_prob > self.confidence_threshold:
+            return {
+                'side': 'UP',
+                'confidence': true_prob,
+                'edge': edge,
+                'expected_return': edge * (1 - current_price),
+                'time_to_close': time_to_close,
+                'decay_rate': decay_rate
+            }
+        elif edge > 0.05 and true_prob < (1 - self.confidence_threshold):
+            return {
+                'side': 'DOWN',
+                'confidence': 1 - true_prob,
+                'edge': edge,
+                'expected_return': edge * current_price,
+                'time_to_close': time_to_close,
+                'decay_rate': decay_rate
+            }
         
         return None
+    
+    def calculate_position_size(self, signal: Dict[str, Any]) -> float:
+        """Calculate position size based on confidence and time to close."""
+        base_size = self.position_size
+        confidence_multiplier = signal['confidence']
+        
+        # Increase size as we get closer to close (more certainty)
+        time_factor = 1 + (60 - signal.get('time_to_close', 60)) / 60
+        
+        return base_size * confidence_multiplier * min(time_factor, 2.0)
+    
+    def should_exit(self, current_price: float, position: Dict[str, Any], 
+                    data: Dict[str, Any]) -> bool:
+        """Determine if position should be exited."""
+        time_to_close = data.get('time_to_close', 0)
+        
+        # Exit if very close to close
+        if time_to_close < 10:
+            return True
+        
+        # Exit if edge has been captured
+        entry_price = position.get('entry_price', current_price)
+        side = position.get('side', 'UP')
+        
+        if side == 'UP':
+            profit = current_price - entry_price
+        else:
+            profit = entry_price - current_price
+        
+        # Take profit at 50% of expected edge
+        expected_edge = position.get('expected_edge', 0.1)
+        if profit > expected_edge * 0.5:
+            return True
+        
+        # Stop loss
+        if profit < -0.15:
+            return True
+        
+        return False
+    
+    def get_params(self) -> Dict[str, Any]:
+        """Get strategy parameters for optimization."""
+        return {
+            'time_threshold': self.time_threshold,
+            'decay_rate_threshold': self.decay_rate_threshold,
+            'confidence_threshold': self.confidence_threshold,
+            'position_size': self.position_size
+        }
+    
+    def set_params(self, params: Dict[str, Any]):
+        """Set strategy parameters."""
+        self.time_threshold = params.get('time_threshold', self.time_threshold)
+        self.decay_rate_threshold = params.get('decay_rate_threshold', self.decay_rate_threshold)
+        self.confidence_threshold = params.get('confidence_threshold', self.confidence_threshold)
+        self.position_size = params.get('position_size', self.position_size)

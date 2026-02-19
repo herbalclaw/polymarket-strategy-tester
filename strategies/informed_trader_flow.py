@@ -1,252 +1,282 @@
 """
-InformedTraderFlow Strategy
+InformedTraderFlow Strategy for Polymarket BTC 5-Minute Markets
 
-Detects "smart money" activity through volume-price divergence patterns.
-Based on VPIN (Volume-Synchronized Probability of Informed Trading) research.
+This strategy detects informed trader flow by analyzing order flow patterns
+that indicate smart money activity. Informed traders often leave footprints
+in the orderbook and trade flow that can be detected and followed.
 
-Key insight: Large informed traders leave footprints in volume patterns.
-When volume spikes without corresponding price movement, it suggests
-informed accumulation (if buying) or distribution (if selling).
+Research Basis:
+- Academic research ("Unravelling the Probabilistic Forest") analyzed 86M transactions
+- Top traders systematically capture pricing errors through informed flow
+- Whale activity often precedes significant price movements
+- Order flow toxicity indicators can predict adverse selection
 
-Reference: "VPIN and the Flash Crash" - Easley, Lopez de Prado, O'Hara
+Edge: Detect and follow informed trader flow before prices fully adjust.
 """
 
-from typing import Optional
+import numpy as np
+from typing import Dict, Any, Optional, List
 from collections import deque
-from statistics import mean, stdev
-
-from core.base_strategy import BaseStrategy, Signal, MarketData
+from strategies.base_strategy import BaseStrategy
 
 
-class InformedTraderFlowStrategy(BaseStrategy):
+class InformedTraderFlow(BaseStrategy):
     """
-    Detect informed trading through volume-price divergence.
+    Strategy that detects and follows informed trader flow.
     
-    Smart money often trades in ways that minimize market impact.
-    This creates patterns where volume increases but price doesn't
-    move proportionally - signaling informed accumulation/distribution.
+    Informed traders (whales, insiders, sophisticated algos) often trade
+    in predictable patterns. This strategy uses order flow analysis to
+    detect their activity and follow their trades.
     """
     
-    name = "InformedTraderFlow"
-    description = "Detect smart money through volume-price patterns"
-    
-    def __init__(self, config: dict = None):
+    def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
+        self.name = "InformedTraderFlow"
+        self.description = "Detects and follows informed trader flow patterns"
         
-        # Price and volume history
-        self.price_history: deque = deque(maxlen=100)
-        self.volume_history: deque = deque(maxlen=100)
-        self.returns_history: deque = deque(maxlen=100)
+        # Strategy parameters
+        self.flow_window = config.get('flow_window', 10)  # Trades to analyze
+        self.min_flow_strength = config.get('min_flow_strength', 0.6)  # Min flow confidence
+        self.volume_threshold = config.get('volume_threshold', 1.5)  # Relative volume
+        self.position_size = config.get('position_size', 1.0)
         
-        # VPIN-like calculation parameters
-        self.volume_buckets = self.config.get('volume_buckets', 50)
-        self.bucket_size = self.config.get('bucket_size', 1000)  # $1000 volume per bucket
+        # State tracking
+        self.trade_history = deque(maxlen=50)
+        self.volume_history = deque(maxlen=20)
+        self.flow_score_history = deque(maxlen=10)
         
-        # Volume imbalance threshold
-        self.imbalance_threshold = self.config.get('imbalance_threshold', 0.6)  # 60% buy or sell
+        # Informed flow indicators
+        self.large_trade_threshold = config.get('large_trade_threshold', 1000)  # USD
+        self.aggressive_buy_ratio = 0.0
+        self.aggressive_sell_ratio = 0.0
         
-        # Price absorption detection
-        self.absorption_threshold = self.config.get('absorption_threshold', 2.0)  # 2x normal volume
-        self.price_move_threshold = self.config.get('price_move_threshold', 0.002)  # 0.2%
-        
-        # Trend confirmation
-        self.use_trend = self.config.get('use_trend', True)
-        self.trend_periods = self.config.get('trend_periods', 10)
-        
-        # Signal generation
-        self.min_confidence = self.config.get('min_confidence', 0.6)
-        
-        # Cooldown
-        self.cooldown_periods = self.config.get('cooldown_periods', 8)
-        self.last_signal_period = -self.cooldown_periods
-        self.period_count = 0
-        
-        # Track volume at bid vs ask
-        self.bid_volume_history: deque = deque(maxlen=50)
-        self.ask_volume_history: deque = deque(maxlen=50)
-    
-    def calculate_returns(self) -> float:
-        """Calculate recent return."""
-        if len(self.price_history) < 2:
-            return 0
-        
-        prices = list(self.price_history)
-        current = prices[-1]
-        previous = prices[-2]
-        
-        if previous == 0:
-            return 0
-        
-        return (current - previous) / previous
-    
-    def detect_volume_anomaly(self) -> tuple:
+    def analyze_trade_flow(self) -> Dict[str, float]:
         """
-        Detect unusual volume patterns.
-        Returns (is_anomaly, volume_ratio, direction)
+        Analyze recent trade flow for informed activity.
+        
+        Returns:
+            Dict with flow metrics
         """
-        if len(self.volume_history) < 20:
-            return False, 0, "neutral"
+        if len(self.trade_history) < self.flow_window:
+            return {'flow_score': 0.0, 'confidence': 0.0}
         
-        volumes = list(self.volume_history)
-        current_volume = volumes[-1]
-        avg_volume = mean(volumes[-20:])
+        recent_trades = list(self.trade_history)[-self.flow_window:]
         
-        if avg_volume == 0:
-            return False, 0, "neutral"
+        # Calculate aggressive buy/sell ratios
+        buy_volume = sum(t['size'] for t in recent_trades if t['side'] == 'buy')
+        sell_volume = sum(t['size'] for t in recent_trades if t['side'] == 'sell')
+        total_volume = buy_volume + sell_volume
         
-        volume_ratio = current_volume / avg_volume
+        if total_volume == 0:
+            return {'flow_score': 0.0, 'confidence': 0.0}
         
-        # Check if volume is anomalously high
-        is_anomaly = volume_ratio > self.absorption_threshold
+        buy_ratio = buy_volume / total_volume
+        sell_ratio = sell_volume / total_volume
         
-        # Determine direction from order book if available
-        direction = "neutral"
-        if len(self.bid_volume_history) > 0 and len(self.ask_volume_history) > 0:
-            bid_vol = self.bid_volume_history[-1]
-            ask_vol = self.ask_volume_history[-1]
-            total = bid_vol + ask_vol
-            
-            if total > 0:
-                if bid_vol / total > self.imbalance_threshold:
-                    direction = "buying"
-                elif ask_vol / total > self.imbalance_threshold:
-                    direction = "selling"
+        # Analyze large trades (potential informed flow)
+        large_buys = sum(t['size'] for t in recent_trades 
+                        if t['side'] == 'buy' and t['size'] > self.large_trade_threshold)
+        large_sells = sum(t['size'] for t in recent_trades 
+                         if t['side'] == 'sell' and t['size'] > self.large_trade_threshold)
         
-        return is_anomaly, volume_ratio, direction
+        # Calculate flow score
+        # Positive = informed buying, Negative = informed selling
+        flow_score = 0.0
+        
+        # Weight by volume imbalance
+        if buy_ratio > 0.6:
+            flow_score += (buy_ratio - 0.5) * 2  # Scale to 0-1
+        elif sell_ratio > 0.6:
+            flow_score -= (sell_ratio - 0.5) * 2
+        
+        # Weight by large trade activity
+        large_total = large_buys + large_sells
+        if large_total > 0:
+            large_buy_ratio = large_buys / large_total
+            if large_buy_ratio > 0.7:
+                flow_score += 0.3
+            elif large_buy_ratio < 0.3:
+                flow_score -= 0.3
+        
+        # Calculate confidence based on volume
+        avg_volume = np.mean(list(self.volume_history)) if self.volume_history else total_volume
+        volume_confidence = min(total_volume / (avg_volume + 1), 2.0) / 2.0
+        
+        return {
+            'flow_score': np.clip(flow_score, -1.0, 1.0),
+            'confidence': volume_confidence,
+            'buy_ratio': buy_ratio,
+            'sell_ratio': sell_ratio,
+            'large_buy_ratio': large_buys / (large_total + 1),
+            'total_volume': total_volume
+        }
     
-    def detect_price_absorption(self) -> tuple:
+    def detect_toxic_flow(self, data: Dict[str, Any]) -> float:
         """
-        Detect price absorption - high volume with minimal price movement.
-        Returns (is_absorption, absorption_score, direction)
+        Detect toxic flow that might indicate adverse selection.
+        
+        Returns:
+            Toxicity score (0-1, higher = more toxic)
         """
-        if len(self.price_history) < 10 or len(self.volume_history) < 10:
-            return False, 0, "neutral"
+        orderbook = data.get('orderbook', {})
         
-        # Calculate recent price volatility
-        returns = []
-        prices = list(self.price_history)
-        for i in range(1, min(10, len(prices))):
-            if prices[-i-1] > 0:
-                r = (prices[-i] - prices[-i-1]) / prices[-i-1]
-                returns.append(abs(r))
+        if not orderbook:
+            return 0.0
         
-        if not returns:
-            return False, 0, "neutral"
+        # Check for order book imbalance
+        bid_volume = sum(b['size'] for b in orderbook.get('bids', [])[:5])
+        ask_volume = sum(a['size'] for a in orderbook.get('asks', [])[:5])
         
-        avg_abs_return = mean(returns)
-        current_return = abs(self.calculate_returns())
+        total = bid_volume + ask_volume
+        if total == 0:
+            return 0.0
         
-        # Volume anomaly detection
-        is_anomaly, volume_ratio, direction = self.detect_volume_anomaly()
+        imbalance = abs(bid_volume - ask_volume) / total
         
-        if not is_anomaly:
-            return False, 0, "neutral"
-        
-        # Price absorption: high volume but low price movement
-        if current_return < self.price_move_threshold and avg_abs_return > 0:
-            absorption_score = volume_ratio * (avg_abs_return / max(current_return, 0.0001))
-            
-            if absorption_score > 2.0:  # Significant absorption
-                return True, absorption_score, direction
-        
-        return False, 0, "neutral"
+        # High imbalance can indicate informed flow
+        return min(imbalance, 1.0)
     
-    def get_trend_direction(self) -> float:
-        """Get trend direction (-1 to 1)."""
-        if len(self.price_history) < self.trend_periods:
-            return 0
+    def generate_signal(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Generate trading signal based on informed flow detection.
         
-        prices = list(self.price_history)
-        early = mean(prices[-self.trend_periods:-self.trend_periods//2])
-        late = mean(prices[-self.trend_periods//2:])
-        
-        if early == 0:
-            return 0
-        
-        trend = (late - early) / early
-        return max(-1, min(1, trend * 20))  # Scale and clamp
-    
-    def generate_signal(self, data: MarketData) -> Optional[Signal]:
-        current_price = data.price
-        self.period_count += 1
-        
-        # Update history
-        self.price_history.append(current_price)
-        self.volume_history.append(data.volume_24h)
-        
-        # Update order book volume if available
-        if data.order_book:
-            bids = data.order_book.get('bids', [])
-            asks = data.order_book.get('asks', [])
+        Args:
+            data: Market data including trades, orderbook, price
             
-            bid_vol = sum(float(b.get('size', 0)) for b in bids[:5])
-            ask_vol = sum(float(a.get('size', 0)) for a in asks[:5])
-            
-            self.bid_volume_history.append(bid_vol)
-            self.ask_volume_history.append(ask_vol)
+        Returns:
+            Signal dict or None
+        """
+        current_price = data.get('price', 0.5)
         
-        # Check cooldown
-        if self.period_count - self.last_signal_period < self.cooldown_periods:
+        # Update trade history
+        trades = data.get('trades', [])
+        for trade in trades:
+            self.trade_history.append(trade)
+        
+        # Update volume history
+        if trades:
+            total_volume = sum(t['size'] for t in trades)
+            self.volume_history.append(total_volume)
+        
+        # Need sufficient history
+        if len(self.trade_history) < self.flow_window:
             return None
         
-        # Need enough data
-        if len(self.price_history) < 30:
-            return None
+        # Analyze flow
+        flow_analysis = self.analyze_trade_flow()
+        flow_score = flow_analysis['flow_score']
+        confidence = flow_analysis['confidence']
         
-        # Calculate returns
-        ret = self.calculate_returns()
-        self.returns_history.append(ret)
+        # Check for toxic flow
+        toxicity = self.detect_toxic_flow(data)
         
-        # Detect price absorption (smart money footprint)
-        is_absorption, score, direction = self.detect_price_absorption()
+        # Adjust confidence based on toxicity
+        # If flow is toxic, be more confident (informed traders are active)
+        adjusted_confidence = confidence * (0.5 + 0.5 * toxicity)
         
-        if not is_absorption:
-            return None
+        # Track flow score
+        self.flow_score_history.append(flow_score)
         
-        # Get trend for confirmation
-        trend = self.get_trend_direction()
-        
-        # Generate signal based on informed flow direction
-        signal = None
-        confidence = 0.0
-        
-        if direction == "buying":
-            # Informed buying detected
-            if self.use_trend and trend > 0:
-                # Confirm with trend
-                confidence = min(0.6 + (score - 2) * 0.05 + trend * 0.1, 0.85)
-            elif not self.use_trend:
-                confidence = min(0.6 + (score - 2) * 0.05, 0.8)
-            
-            if confidence >= self.min_confidence:
-                signal = "up"
-        
-        elif direction == "selling":
-            # Informed selling detected
-            if self.use_trend and trend < 0:
-                # Confirm with trend
-                confidence = min(0.6 + (score - 2) * 0.05 + abs(trend) * 0.1, 0.85)
-            elif not self.use_trend:
-                confidence = min(0.6 + (score - 2) * 0.05, 0.8)
-            
-            if confidence >= self.min_confidence:
-                signal = "down"
-        
-        if signal:
-            self.last_signal_period = self.period_count
-            
-            return Signal(
-                strategy=self.name,
-                signal=signal,
-                confidence=confidence,
-                reason=f"Informed {direction} flow detected (absorption score: {score:.2f})",
-                metadata={
-                    'absorption_score': score,
-                    'direction': direction,
-                    'volume_ratio': score / (avg_abs_return / max(abs(ret), 0.0001)) if 'avg_abs_return' in dir() else score,
-                    'trend': trend if self.use_trend else None,
-                    'current_return': ret
+        # Generate signal if flow is strong enough
+        if abs(flow_score) > self.min_flow_strength and adjusted_confidence > 0.5:
+            if flow_score > 0:
+                # Informed buying detected
+                edge = flow_score * adjusted_confidence
+                return {
+                    'side': 'UP',
+                    'confidence': adjusted_confidence,
+                    'edge': edge,
+                    'expected_return': edge * (1 - current_price),
+                    'flow_score': flow_score,
+                    'toxicity': toxicity,
+                    'buy_ratio': flow_analysis['buy_ratio']
                 }
-            )
+            else:
+                # Informed selling detected
+                edge = abs(flow_score) * adjusted_confidence
+                return {
+                    'side': 'DOWN',
+                    'confidence': adjusted_confidence,
+                    'edge': edge,
+                    'expected_return': edge * current_price,
+                    'flow_score': flow_score,
+                    'toxicity': toxicity,
+                    'sell_ratio': flow_analysis['sell_ratio']
+                }
         
         return None
+    
+    def calculate_position_size(self, signal: Dict[str, Any]) -> float:
+        """Calculate position size based on flow strength and confidence."""
+        base_size = self.position_size
+        flow_score = abs(signal.get('flow_score', 0))
+        confidence = signal.get('confidence', 0.5)
+        
+        # Scale by flow strength and confidence
+        return base_size * flow_score * confidence
+    
+    def should_exit(self, current_price: float, position: Dict[str, Any], 
+                    data: Dict[str, Any]) -> bool:
+        """Determine if position should be exited."""
+        # Check if flow has reversed
+        flow_analysis = self.analyze_trade_flow()
+        current_flow = flow_analysis['flow_score']
+        
+        side = position.get('side', 'UP')
+        
+        # Exit if flow has reversed significantly
+        if side == 'UP' and current_flow < -0.3:
+            return True
+        if side == 'DOWN' and current_flow > 0.3:
+            return True
+        
+        # Take profit/stop loss
+        entry_price = position.get('entry_price', current_price)
+        
+        if side == 'UP':
+            profit = current_price - entry_price
+        else:
+            profit = entry_price - current_price
+        
+        expected_edge = position.get('expected_edge', 0.1)
+        
+        # Take profit at 70% of expected edge
+        if profit > expected_edge * 0.7:
+            return True
+        
+        # Stop loss
+        if profit < -0.1:
+            return True
+        
+        return False
+    
+    def get_flow_metrics(self) -> Dict[str, Any]:
+        """Get current flow metrics for monitoring."""
+        flow_analysis = self.analyze_trade_flow()
+        
+        return {
+            'current_flow_score': flow_analysis['flow_score'],
+            'confidence': flow_analysis['confidence'],
+            'buy_ratio': flow_analysis['buy_ratio'],
+            'sell_ratio': flow_analysis['sell_ratio'],
+            'total_volume': flow_analysis['total_volume'],
+            'history_length': len(self.trade_history)
+        }
+    
+    def get_params(self) -> Dict[str, Any]:
+        """Get strategy parameters for optimization."""
+        return {
+            'flow_window': self.flow_window,
+            'min_flow_strength': self.min_flow_strength,
+            'volume_threshold': self.volume_threshold,
+            'position_size': self.position_size,
+            'large_trade_threshold': self.large_trade_threshold
+        }
+    
+    def set_params(self, params: Dict[str, Any]):
+        """Set strategy parameters."""
+        self.flow_window = params.get('flow_window', self.flow_window)
+        self.min_flow_strength = params.get('min_flow_strength', self.min_flow_strength)
+        self.volume_threshold = params.get('volume_threshold', self.volume_threshold)
+        self.position_size = params.get('position_size', self.position_size)
+        self.large_trade_threshold = params.get('large_trade_threshold', self.large_trade_threshold)

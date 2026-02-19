@@ -40,6 +40,9 @@ from .layering_detection import LayeringDetectionStrategy
 from .flash_crash import FlashCrashStrategy
 from .flow_toxicity import FlowToxicityStrategy
 from .momentum_reversal import MomentumReversalStrategy
+from .time_decay_alpha import TimeDecayAlpha
+from .stale_quote_arbitrage import StaleQuoteArbitrage
+from .informed_trader_flow import InformedTraderFlow
 
 __all__ = [
     'MomentumStrategy',
@@ -79,5 +82,8 @@ __all__ = [
     'LayeringDetectionStrategy',
     'FlashCrashStrategy',
     'FlowToxicityStrategy',
-    'MomentumReversalStrategy'
+    'MomentumReversalStrategy',
+    'TimeDecayAlpha',
+    'StaleQuoteArbitrage', 
+    'InformedTraderFlow'
 ]
