@@ -43,6 +43,9 @@ from strategies.price_skew import PriceSkewStrategy
 from strategies.serial_correlation import SerialCorrelationStrategy
 from strategies.liquidity_shock import LiquidityShockStrategy
 from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
+from strategies.volatility_expansion import VolatilityExpansionStrategy
+from strategies.informed_trader_flow import InformedTraderFlowStrategy
+from strategies.contrarian_extreme import ContrarianExtremeStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,6 +102,9 @@ class PaperTrader:
             SerialCorrelationStrategy(),  # NEW: Mean reversion from serial correlation
             LiquidityShockStrategy(),  # NEW: Fade liquidity shocks
             OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance from LOB
+            VolatilityExpansionStrategy(),  # NEW: Trade volatility expansion after compression
+            InformedTraderFlowStrategy(),  # NEW: Detect smart money through volume-price patterns
+            ContrarianExtremeStrategy(),  # NEW: Fade price extremes exploiting retail overreaction
         ]
         
         # Register all strategies
