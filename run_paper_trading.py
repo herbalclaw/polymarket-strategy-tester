@@ -34,6 +34,9 @@ from strategies.microstructure_scalper import MicrostructureScalperStrategy
 from strategies.ema_arbitrage import EMAArbitrageStrategy
 from strategies.longshot_bias import LongshotBiasStrategy
 from strategies.high_probability_bond import HighProbabilityBondStrategy
+from strategies.time_decay import TimeDecayStrategy
+from strategies.bollinger_bands import BollingerBandsStrategy
+from strategies.spread_capture import SpreadCaptureStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,6 +84,9 @@ class PaperTrader:
             EMAArbitrageStrategy(),  # NEW: $427K PNL strategy from Twitter
             LongshotBiasStrategy(),  # NEW: Behavioral bias exploitation
             HighProbabilityBondStrategy(),  # NEW: 96% win rate strategy
+            TimeDecayStrategy(),  # NEW: Time premium harvesting
+            BollingerBandsStrategy(),  # NEW: Mean reversion with BB
+            SpreadCaptureStrategy(),  # NEW: Market making spread capture
         ]
         
         # Register all strategies
