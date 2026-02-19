@@ -79,6 +79,9 @@ from strategies.twap_detector import TWAPDetectorStrategy
 from strategies.retail_sentiment_fade import RetailSentimentFadeStrategy
 from strategies.implied_volatility_skew import ImpliedVolatilitySkewStrategy
 from strategies.funding_rate_arbitrage import FundingRateArbitrageStrategy
+from strategies.liquidity_reward_optimized import LiquidityRewardOptimizedStrategy
+from strategies.asymmetric_momentum import AsymmetricMomentumStrategy
+from strategies.volume_profile_reversion import VolumeProfileReversionStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -171,6 +174,9 @@ class PaperTrader:
             RetailSentimentFadeStrategy(),  # NEW: Fade retail overreaction extremes
             ImpliedVolatilitySkewStrategy(),  # NEW: Exploit volatility skew asymmetry
             FundingRateArbitrageStrategy(),  # NEW: Time-premium and drift arbitrage
+            LiquidityRewardOptimizedStrategy(),  # NEW: Optimize for Polymarket liquidity rewards
+            AsymmetricMomentumStrategy(),  # NEW: Exploit asymmetric momentum patterns
+            VolumeProfileReversionStrategy(),  # NEW: Fade volume profile imbalances
         ]
         
         # Register all strategies
