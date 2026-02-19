@@ -1,16 +1,19 @@
 """
-FundingRateArbitrage Strategy - Exploit funding rate anomalies in prediction markets.
+TimeDecayArbitrage Strategy - Exploit time decay (theta) in binary prediction markets.
 
 Economic Rationale:
-- Polymarket doesn't have traditional funding rates like perp exchanges
-- However, the "implied funding" comes from the time decay of binary options
-- The edge comes from comparing the current price to the expected drift
-- In efficient markets, price should drift toward the true probability over time
+- Binary options have negative theta (time decay) as expiry approaches
+- Price should drift toward 0 or 1 as time passes
+- When price stays flat despite time passing, there's mispricing
+- Trade the expected drift vs actual price action
 
 Edge Source:
 - Time-premium extraction
 - Drift arbitrage (price vs expected value)
 - Mean reversion of overextended moves
+
+Note: This is NOT funding rate arbitrage (Polymarket has no funding rates).
+This is time decay arbitrage specific to binary options.
 """
 
 from typing import Optional, Dict, Any, List
@@ -18,22 +21,18 @@ from datetime import datetime
 from core.base_strategy import BaseStrategy, Signal, MarketData
 
 
-class FundingRateArbitrageStrategy(BaseStrategy):
+class TimeDecayArbitrageStrategy(BaseStrategy):
     """
-    Exploit time-premium and drift in BTC 5-min prediction markets.
+    Exploit time decay (theta) in BTC 5-min prediction markets.
     
     Logic:
-    - Binary options have negative theta (time decay)
-    - Price should drift toward 0 or 1 as expiry approaches
+    - Binary options have negative theta (time decay) as expiry approaches
+    - Price should drift toward 0 or 1 as time passes
     - When price stays flat despite time passing, there's mispricing
     - Trade the expected drift vs actual price action
-    
-    This is analogous to funding rate arbitrage in perpetual futures:
-    - Longs pay shorts when perp > spot
-    - Here, "time buyers" pay "time sellers" through decay
     """
     
-    name = "FundingRateArbitrage"
+    name = "TimeDecayArbitrage"
     version = "1.0.0"
     
     def __init__(self, config: Dict = None):

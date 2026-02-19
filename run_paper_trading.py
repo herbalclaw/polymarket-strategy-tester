@@ -78,7 +78,7 @@ from strategies.combinatorial_arbitrage import CombinatorialArbitrageStrategy
 from strategies.twap_detector import TWAPDetectorStrategy
 from strategies.retail_sentiment_fade import RetailSentimentFadeStrategy
 from strategies.implied_volatility_skew import ImpliedVolatilitySkewStrategy
-from strategies.funding_rate_arbitrage import FundingRateArbitrageStrategy
+from strategies.funding_rate_arbitrage import TimeDecayArbitrageStrategy
 from strategies.stale_quote_arbitrage import StaleQuoteArbitrageStrategy
 from strategies.volatility_clustering import VolatilityClusteringStrategy
 from strategies.layering_detection import LayeringDetectionStrategy
@@ -179,7 +179,7 @@ class PaperTrader:
             TWAPDetectorStrategy(),  # NEW: Detect and exploit institutional TWAP orders
             RetailSentimentFadeStrategy(),  # NEW: Fade retail overreaction extremes
             ImpliedVolatilitySkewStrategy(),  # NEW: Exploit volatility skew asymmetry
-            FundingRateArbitrageStrategy(),  # NEW: Time-premium and drift arbitrage
+            TimeDecayArbitrageStrategy(),  # NEW: Time decay (theta) arbitrage
             LiquidityRewardOptimizedStrategy(),  # NEW: Optimize for Polymarket liquidity rewards
             AsymmetricMomentumStrategy(),  # NEW: Exploit asymmetric momentum patterns
             VolumeProfileReversionStrategy(),  # NEW: Fade volume profile imbalances
