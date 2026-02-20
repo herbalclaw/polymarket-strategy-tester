@@ -386,6 +386,7 @@ class PaperTrader:
         
         # Window hasn't closed yet
         if current_window <= market_window:
+            logger.debug(f"Window not closed yet: current={current_window}, market={market_window}")
             return None
         
         # CRITICAL FIX: Force settlement if position is more than 1 window behind (5+ minutes)
@@ -497,10 +498,9 @@ class PaperTrader:
                     continue
                 
                 # Process open positions - check for expiry settlement first
-                logger.debug(f"Processing {len(self.open_positions)} open positions...")
+                logger.info(f"Processing {len(self.open_positions)} open positions for settlement...")
                 for strategy_name, position in list(self.open_positions.items()):
                     try:
-                        logger.debug(f"Checking position: {strategy_name}")
                         # First check if window expired (settlement)
                         settlement = self.check_expiry_settlement(position)
                         
