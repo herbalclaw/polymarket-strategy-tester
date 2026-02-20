@@ -94,6 +94,9 @@ from strategies.time_weighted_microstructure import TimeWeightedMicrostructureSt
 from strategies.book_pressure_reversion import BookPressureReversionStrategy
 from strategies.price_discovery_momentum import PriceDiscoveryMomentumStrategy
 from strategies.spread_scalper import SpreadScalperStrategy
+from strategies.kelly_criterion_optimal import KellyCriterionOptimalStrategy
+from strategies.time_decay_position import TimeDecayPositionStrategy
+from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -201,6 +204,9 @@ class PaperTrader:
             BookPressureReversionStrategy(),  # NEW: Mean reversion after extreme book pressure
             PriceDiscoveryMomentumStrategy(),  # NEW: Capture momentum from gradual price discovery
             SpreadScalperStrategy(),  # NEW: Capture bid-ask spread through liquidity provision
+            KellyCriterionOptimalStrategy(),  # NEW: Kelly criterion optimal bet sizing
+            TimeDecayPositionStrategy(),  # NEW: Time-decay position sizing
+            OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance alpha
         ]
         
         # Register all strategies
