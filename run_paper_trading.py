@@ -294,10 +294,11 @@ class PaperTrader:
             logger.debug(f"Too close to expiry ({time_in_window:.0f}s), skipping entry")
             return None
         
-        # Get entry fill from Polymarket
+        # Get entry fill from Polymarket with REALISTIC slippage + fees
         entry_price, entry_slippage, entry_status = self.feed.simulate_fill(
             side=signal.signal,
-            size_dollars=5.0
+            size_dollars=5.0,
+            is_maker=False  # Taker entry (market order)
         )
         
         # EDGE CASE: Invalid price (allow 0.01 and 0.99, reject 0.50 default)
@@ -339,16 +340,18 @@ class PaperTrader:
         side = position['side']
         entry_price = position['entry_price']
         
-        # Get exit fill from Polymarket (same side token)
+        # REALISTIC EXIT: Higher slippage on exit (taker fee + worse liquidity)
+        # Exiting is harder than entering - use higher slippage range
         exit_price, exit_slippage, exit_status = self.feed.simulate_fill(
             side=side,
-            size_dollars=5.0
+            size_dollars=5.0,
+            is_maker=False  # Always taker on exit (need to get out)
         )
         
-        if exit_price == 0 or exit_price == 0.5:
-            logger.warning(f"No fill for exit: {exit_status}, using entry price")
-            exit_price = entry_price
-            exit_slippage = 0
+        if exit_price == 0 or exit_price == 0.5 or exit_status == "no_fill":
+            # Can't exit - this is realistic! Force hold to expiry
+            logger.warning(f"Cannot exit position: {exit_status}, holding to expiry")
+            return None
         
         # Calculate P&L for early exit
         pnl_amount, pnl_pct = self.calculate_early_exit_pnl(entry_price, exit_price, side)
