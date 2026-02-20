@@ -97,6 +97,8 @@ from strategies.spread_scalper import SpreadScalperStrategy
 from strategies.kelly_criterion_optimal import KellyCriterionOptimalStrategy
 from strategies.time_decay_position import TimeDecayPositionStrategy
 from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
+from strategies.micro_price import MicroPriceStrategy
+from strategies.reservation_price import ReservationPriceStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -207,6 +209,8 @@ class PaperTrader:
             KellyCriterionOptimalStrategy(),  # NEW: Kelly criterion optimal bet sizing
             TimeDecayPositionStrategy(),  # NEW: Time-decay position sizing
             OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance alpha
+            MicroPriceStrategy(),  # NEW: VAMP micro-price deviation
+            ReservationPriceStrategy(),  # NEW: Market making with position skew
         ]
         
         # Register all strategies
