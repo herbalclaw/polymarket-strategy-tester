@@ -13,7 +13,7 @@ import numpy as np
 from core.base_strategy import BaseStrategy, Signal, MarketData
 
 
-class KellyCriterionStrategy(BaseStrategy):
+class KellyCriterionOptimalStrategy(BaseStrategy):
     """
     Kelly criterion optimal bet sizing for prediction markets.
     
