@@ -142,7 +142,7 @@ class PaperTrader:
             LongshotBiasStrategy(),  # NEW: Behavioral bias exploitation
             HighProbabilityBondStrategy(),  # NEW: 96% win rate strategy
             TimeDecayStrategy(),  # NEW: Time premium harvesting
-            BollingerBandsStrategy(),  # NEW: Mean reversion with BB
+            # REMOVED: BollingerBandsStrategy(),  # NEW: Mean reversion with BB
             SpreadCaptureStrategy(),  # NEW: Market making spread capture
             VPINStrategy(),  # NEW: Volume-synchronized informed trading detection
             TimeWeightedMomentumStrategy(),  # NEW: Time-weighted momentum for 5-min windows
@@ -164,15 +164,15 @@ class PaperTrader:
             LiquiditySweepStrategy(),  # NEW: Fade liquidity sweeps and capture reversals
             VolumeWeightedMicropriceStrategy(),  # NEW: Volume-weighted microprice divergence alpha
             BidAskBounceStrategy(),  # NEW: Trade bid-ask level bounces in CLOB
-            GammaScalpStrategy(),  # NEW: Gamma scalping near 50-cent high-sensitivity zone
+            # REMOVED: GammaScalpStrategy(),  # NEW: Gamma scalping near 50-cent high-sensitivity zone
             AdverseSelectionFilterStrategy(),  # NEW: Filter based on adverse selection risk
-            OrderBookSlopeStrategy(),  # NEW: Order book slope and depth analysis
+            # REMOVED: OrderBookSlopeStrategy(),  # NEW: Order book slope and depth analysis
             QuoteStuffingDetectorStrategy(),  # NEW: Detect and exploit quote stuffing manipulation
             MicroPriceReversionStrategy(),  # NEW: Microprice deviation reversion alpha
             LateEntryMomentumStrategy(),  # NEW: Late-window momentum continuation
             SmartMoneyFlowStrategy(),  # NEW: Smart money flow detection
             KellyCriterionStrategy(),  # NEW: Kelly criterion optimal bet sizing
-            TimeDecayAlpha(),  # NEW: Exploit time decay in short-term markets
+            # REMOVED: TimeDecayAlpha(),  # NEW: Exploit time decay in short-term markets
             ToxicFlowDetectorStrategy(),  # NEW: Detect and fade toxic order flow
             DualClassArbitrageStrategy(),  # NEW: YES+NO parity arbitrage
             NoFarmingStrategy(),  # NEW: Systematic NO farming exploiting long-shot bias
