@@ -95,6 +95,7 @@ class FirstPrinciplesMomentumStrategy(BaseStrategy):
                     signal="up",
                     confidence=min(0.9, confidence),
                     strategy=self.name,
+                    reason=f"{phase}_momentum_positive",
                     metadata={
                         'phase': phase,
                         'momentum': momentum,
@@ -106,6 +107,7 @@ class FirstPrinciplesMomentumStrategy(BaseStrategy):
                     signal="down",
                     confidence=min(0.9, confidence),
                     strategy=self.name,
+                    reason=f"{phase}_momentum_negative",
                     metadata={
                         'phase': phase,
                         'momentum': momentum,
@@ -125,6 +127,7 @@ class FirstPrinciplesMomentumStrategy(BaseStrategy):
                     signal="up",
                     confidence=min(0.85, confidence),
                     strategy=self.name,
+                    reason=f"{phase}_momentum_positive",
                     metadata={
                         'phase': phase,
                         'momentum': momentum,
@@ -136,6 +139,7 @@ class FirstPrinciplesMomentumStrategy(BaseStrategy):
                     signal="down",
                     confidence=min(0.85, confidence),
                     strategy=self.name,
+                    reason=f"{phase}_momentum_negative",
                     metadata={
                         'phase': phase,
                         'momentum': momentum,
