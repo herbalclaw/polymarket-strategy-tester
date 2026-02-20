@@ -60,6 +60,10 @@ class MicroPriceStrategy(BaseStrategy):
         
         mid = data.price
         
+        # Avoid division by zero
+        if mid == 0:
+            return None
+        
         # Calculate deviation in bps
         deviation_bps = (vamp - mid) / mid * 10000
         
@@ -73,6 +77,11 @@ class MicroPriceStrategy(BaseStrategy):
         # Calculate average deviation
         avg_vamp = np.mean(self.vamp_history)
         avg_mid = np.mean(self.mid_history)
+        
+        # Avoid division by zero
+        if avg_mid == 0:
+            return None
+            
         avg_deviation_bps = (avg_vamp - avg_mid) / avg_mid * 10000
         
         # Skip if price is extreme

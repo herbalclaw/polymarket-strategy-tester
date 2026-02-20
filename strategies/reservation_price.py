@@ -65,6 +65,10 @@ class ReservationPriceStrategy(BaseStrategy):
         
         mid = data.price
         
+        # Avoid division by zero
+        if mid == 0:
+            return None
+        
         # Calculate deviation
         deviation = reservation - mid
         deviation_pct = deviation / mid

@@ -388,10 +388,10 @@ class PaperTrader:
         if current_window <= market_window:
             return None
         
-        # CRITICAL FIX: Force settlement if position is more than 2 windows behind
+        # CRITICAL FIX: Force settlement if position is more than 1 window behind (5+ minutes)
         # This prevents positions from staying open indefinitely
         windows_behind = (current_window - market_window) // 300
-        if windows_behind > 2:
+        if windows_behind >= 1:
             logger.warning(f"Position from window {market_window} is {windows_behind} windows behind, forcing settlement")
             entry_price = position['entry_price']
             side = position['side']

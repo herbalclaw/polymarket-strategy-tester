@@ -77,10 +77,14 @@ class KellyCriterionOptimalStrategy(BaseStrategy):
         # Kelly fraction: f* = (P_true - P_market) / (1 - P_market)
         if p_true > p_market:
             # Long signal
+            if p_market >= 0.99:  # Avoid division by zero
+                return None
             kelly = (p_true - p_market) / (1 - p_market)
             signal_type = "up"
         else:
             # Short signal
+            if p_market <= 0.01:  # Avoid division by zero
+                return None
             kelly = (p_market - p_true) / p_market
             signal_type = "down"
         
