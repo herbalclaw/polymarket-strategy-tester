@@ -571,6 +571,44 @@ class PaperTrader:
                                 #     ))
                                 
                                 logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
+                            else:
+                                # Early exit failed - check if we should force settlement
+                                logger.warning(f"Early exit failed for {strategy_name}, checking for forced settlement...")
+                                market_window = position['market_window']
+                                current_window = self.get_current_market_window()
+                                windows_behind = (current_window - market_window) // 300
+                                
+                                if windows_behind >= 1:
+                                    logger.warning(f"Position {position['trade_id']} is {windows_behind} windows behind, forcing settlement")
+                                    # Force settlement
+                                    entry_price = position['entry_price']
+                                    side = position['side']
+                                    
+                                    # Determine winner based on entry price heuristic
+                                    if entry_price < 0.5:
+                                        exit_price = 1.0
+                                        pnl_amount = 1.0 - entry_price
+                                        result = "WIN"
+                                    else:
+                                        exit_price = 0.0
+                                        pnl_amount = -entry_price
+                                        result = "LOSE"
+                                    
+                                    pnl_pct = (pnl_amount / entry_price) * 100 if entry_price > 0 else 0
+                                    
+                                    del self.open_positions[strategy_name]
+                                    self.trades_executed += 1
+                                    
+                                    closed_trade = self.reporter.record_trade_close(
+                                        trade_id=position['trade_id'],
+                                        exit_price=exit_price,
+                                        pnl_pct=pnl_pct,
+                                        exit_reason=f"forced_settlement_{result.lower()}",
+                                        duration_minutes=hold_time / 60,
+                                        pnl_amount=pnl_amount
+                                    )
+                                    
+                                    logger.info(f"🔒 Trade #{position['trade_id']} FORCED SETTLEMENT | {strategy_name} | {result} | P&L: ${pnl_amount:+.4f} ({pnl_pct:+.1f}%)")
                                 
                     except Exception as e:
                         logger.error(f"Error processing position {strategy_name}: {e}")
