@@ -48,7 +48,10 @@ class MicroPriceStrategy(BaseStrategy):
         ask_depth = data.order_book.get('ask_depth', 1)
         
         # Cross-multiply: bid price weighted by ask depth, ask price weighted by bid depth
-        vamp = (best_bid * ask_depth + best_ask * bid_depth) / (bid_depth + ask_depth)
+        total_depth = bid_depth + ask_depth
+        if total_depth == 0:
+            return None
+        vamp = (best_bid * ask_depth + best_ask * bid_depth) / total_depth
         
         return vamp
     

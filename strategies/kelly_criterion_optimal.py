@@ -49,7 +49,10 @@ class KellyCriterionOptimalStrategy(BaseStrategy):
         ask_depth = data.order_book.get('ask_depth', 1)
         
         # Weight by opposite side liquidity
-        microprice = (best_bid * ask_depth + best_ask * bid_depth) / (bid_depth + ask_depth)
+        total_depth = bid_depth + ask_depth
+        if total_depth == 0:
+            return data.price
+        microprice = (best_bid * ask_depth + best_ask * bid_depth) / total_depth
         
         # Blend with current price
         p_true = 0.7 * microprice + 0.3 * data.price

@@ -49,9 +49,14 @@ class ReservationPriceStrategy(BaseStrategy):
         bid_depth = data.order_book.get('bid_depth', 1)
         ask_depth = data.order_book.get('ask_depth', 1)
         
-        fair_price = (best_bid * ask_depth + best_ask * bid_depth) / (bid_depth + ask_depth)
+        total_depth = bid_depth + ask_depth
+        if total_depth == 0:
+            return None
+        fair_price = (best_bid * ask_depth + best_ask * bid_depth) / total_depth
         
         # Apply position skew
+        if self.max_position == 0:
+            return None
         normalized_position = self.position / self.max_position
         reservation_price = fair_price - self.skew * normalized_position
         
