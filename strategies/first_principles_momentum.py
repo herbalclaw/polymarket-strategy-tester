@@ -42,7 +42,7 @@ class FirstPrinciplesMomentumStrategy(BaseStrategy):
         
     def get_market_phase(self, price: float) -> str:
         """Determine which phase of price discovery we're in."""
-        if self.discovery_range[0] <;= price <;= self.discovery_range[1]:
+        if self.discovery_range[0] <= price <= self.discovery_range[1]:
             return "discovery"
         elif price < self.trending_range[0] or price > self.trending_range[1]:
             return "certainty"
