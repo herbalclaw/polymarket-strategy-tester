@@ -99,6 +99,7 @@ from strategies.time_decay_position import TimeDecayPositionStrategy
 from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 from strategies.micro_price import MicroPriceStrategy
 from strategies.reservation_price import ReservationPriceStrategy
+from strategies.first_principles_momentum import FirstPrinciplesMomentumStrategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -211,6 +212,7 @@ class PaperTrader:
             OrderFlowImbalanceStrategy(),  # NEW: Order flow imbalance alpha
             MicroPriceStrategy(),  # NEW: VAMP micro-price deviation
             ReservationPriceStrategy(),  # NEW: Market making with position skew
+            FirstPrinciplesMomentumStrategy(),  # NEW: 200 IQ - only trade in discovery/trending phases
         ]
         
         # Register all strategies
