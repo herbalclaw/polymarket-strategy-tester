@@ -140,8 +140,16 @@ class ExcelReporter:
                             self.closed_trades.append(trade_record)
                         else:
                             self.open_trades.append(trade_record)
+                        
+                        # Also populate strategy_trades for consistency
+                        strategy_name = trade_record['Strategy']
+                        if strategy_name:
+                            if strategy_name not in self.strategy_trades:
+                                self.strategy_trades[strategy_name] = []
+                            self.strategy_trades[strategy_name].append(trade_record)
                             
             print(f"Loaded {len(self.closed_trades)} closed trades and {len(self.open_trades)} open trades from Excel")
+            print(f"Populated strategy_trades for {len(self.strategy_trades)} strategies")
         except Exception as e:
             print(f"Warning: Could not load existing trades: {e}")
     
