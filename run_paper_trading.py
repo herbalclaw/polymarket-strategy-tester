@@ -132,7 +132,7 @@ class PaperTrader:
         
         # Strategies
         self.strategies = [
-            MomentumStrategy(),
+            # REMOVED: MomentumStrategy(),  # -$14.41 P&L, removed per 24h rule
             ArbitrageStrategy(),
             VWAPStrategy(),
             LeadLagStrategy(),
@@ -141,10 +141,10 @@ class PaperTrader:
             SharpMoneyStrategy(),
             VolatilityScorerStrategy(),
             BreakoutMomentumStrategy(),
-            HighProbabilityConvergenceStrategy(),
+            # REMOVED: HighProbabilityConvergenceStrategy(),  # -$3.80 P&L, removed per 24h rule
             MarketMakingStrategy(),
             MicrostructureScalperStrategy(),
-            EMAArbitrageStrategy(),  # NEW: $427K PNL strategy from Twitter
+            # REMOVED: EMAArbitrageStrategy(),  # -$10.50 P&L, removed per 24h rule
             LongshotBiasStrategy(),  # NEW: Behavioral bias exploitation
             HighProbabilityBondStrategy(),  # NEW: 96% win rate strategy
             TimeDecayStrategy(),  # NEW: Time premium harvesting
@@ -196,7 +196,7 @@ class PaperTrader:
             AsymmetricMomentumStrategy(),  # NEW: Exploit asymmetric momentum patterns
             VolumeProfileReversionStrategy(),  # NEW: Fade volume profile imbalances
             StaleQuoteArbitrage(),  # NEW: Exploit stale quotes during rapid moves
-            VolatilityClusteringStrategy(),  # NEW: Trade volatility clustering (GARCH-based)
+            # REMOVED: VolatilityClusteringStrategy(),  # -$13.81 P&L, removed per 24h rule
             LayeringDetectionStrategy(),  # NEW: Detect and fade layering manipulation
             FlashCrashStrategy(),  # NEW: Capture flash crashes and volatility spikes
             FlowToxicityStrategy(),  # NEW: VPIN-based order flow toxicity detection
