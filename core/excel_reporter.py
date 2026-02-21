@@ -148,8 +148,22 @@ class ExcelReporter:
                                 self.strategy_trades[strategy_name] = []
                             self.strategy_trades[strategy_name].append(trade_record)
                             
+                            # Also populate strategy_capital and strategy_active
+                            if strategy_name not in self.strategy_capital:
+                                self.strategy_capital[strategy_name] = self.initial_capital
+                                self.strategy_active[strategy_name] = True
+                            
+            # Calculate final capital for each strategy from closed trades
+            for strategy_name, trades in self.strategy_trades.items():
+                total_pnl = sum(t.get('P&L $', 0) for t in trades if t.get('Status') == 'CLOSED')
+                self.strategy_capital[strategy_name] = self.initial_capital + total_pnl
+                # Mark as bankrupt if capital <= 0
+                if self.strategy_capital[strategy_name] <= 0:
+                    self.strategy_active[strategy_name] = False
+                            
             print(f"Loaded {len(self.closed_trades)} closed trades and {len(self.open_trades)} open trades from Excel")
             print(f"Populated strategy_trades for {len(self.strategy_trades)} strategies")
+            print(f"Populated strategy_capital for {len(self.strategy_capital)} strategies")
         except Exception as e:
             print(f"Warning: Could not load existing trades: {e}")
     
