@@ -100,6 +100,13 @@ from strategies.order_flow_imbalance import OrderFlowImbalanceStrategy
 from strategies.micro_price import MicroPriceStrategy
 from strategies.reservation_price import ReservationPriceStrategy
 from strategies.first_principles_momentum import FirstPrinciplesMomentumStrategy
+from strategies.scalper_family import (
+    ScalperTightStop,
+    ScalperQuickExit,
+    ScalperMediumHold,
+    ScalperAggressive,
+    ScalperWideTarget,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -132,6 +139,13 @@ class PaperTrader:
         
         # Strategies
         self.strategies = [
+            # SCALPER FAMILY - 0.5 entry, various targets/stops
+            ScalperTightStop(),      # 0.50->0.53, 2% stop, 30-60s
+            ScalperQuickExit(),      # 0.50->0.55, 4% stop, 1-2min
+            ScalperMediumHold(),     # 0.50->0.58, 10% stop, 3-5min
+            ScalperAggressive(),     # 0.50->0.60, 16% stop, 5-10min
+            ScalperWideTarget(),     # 0.50->0.65, 20% stop, 10-15min
+            
             # REMOVED: MomentumStrategy(),  # -$14.41 P&L, removed per 24h rule
             ArbitrageStrategy(),
             VWAPStrategy(),
