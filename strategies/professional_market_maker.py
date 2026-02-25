@@ -16,8 +16,10 @@ class ProfessionalMarketMaker(BaseStrategy):
     - Target 1-2% profit per round trip
     """
     
+    name: str = "ProfessionalMarketMaker"
+    
     def __init__(self):
-        super().__init__("ProfessionalMarketMaker")
+        super().__init__()
         self.base_spread = 0.02  # 2% base spread
         self.max_spread = 0.05   # 5% max spread in volatile markets
         self.min_spread = 0.01   # 1% min spread in calm markets

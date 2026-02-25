@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from core.base_strategy import Signal
 from core.excel_reporter import ExcelReporter
 from core.github_pusher import GitHubAutoPusher
+from core.telegram_notifier import TelegramNotifier, format_trade_notification
 from data.polymarket_feed import PolymarketDataFeed
 from strategies.momentum import MomentumStrategy
 from strategies.arbitrage import ArbitrageStrategy
@@ -136,6 +137,7 @@ class PaperTrader:
             trade_size=5.0
         )
         self.pusher = GitHubAutoPusher(excel_filename="live_trading_results.xlsx")
+        self.telegram = TelegramNotifier()
         
         # Strategies
         self.strategies = [
@@ -540,7 +542,14 @@ class PaperTrader:
                             #         closed_trade
                             #     ))
                             
-                            logger.info(f"🔒 Trade #{position['trade_id']} SETTLED | {strategy_name} | {settlement['result']} | P&L: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.1f}%)")
+                            # Log with Telegram format
+                            side = "LONG" if position.get('side') == 'YES' else "SHORT"
+                            action = "CLOSE"
+                            pnl_emoji = "🟢" if settlement['pnl_amount'] >= 0 else "🔴"
+                            result_text = "PROFIT" if settlement['pnl_amount'] >= 0 else "LOSS"
+                            
+                            logger.info(f"🤖 TRADE TERMINAL ❌ {side} {action.lower()} — {strategy_name}")
+                            logger.info(f"  PnL: ${settlement['pnl_amount']:+.4f} ({settlement['pnl_pct']:+.2f}%) {pnl_emoji} {result_text}")
                             continue
                         
                         # No expiry yet - check for early exit conditions
@@ -584,7 +593,14 @@ class PaperTrader:
                                 #         closed_trade
                                 #     ))
                                 
-                                logger.info(f"🔒 Trade #{position['trade_id']} EARLY EXIT | {strategy_name} | P&L: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.1f}%)")
+                                # Log with Telegram format
+                                side = "LONG" if position.get('side') == 'YES' else "SHORT"
+                                action = "CLOSE"
+                                pnl_emoji = "🟢" if exit_result['pnl_amount'] >= 0 else "🔴"
+                                result_text = "PROFIT" if exit_result['pnl_amount'] >= 0 else "LOSS"
+                                
+                                logger.info(f"🤖 TRADE TERMINAL ❌ {side} {action.lower()} (Early Exit) — {strategy_name}")
+                                logger.info(f"  PnL: ${exit_result['pnl_amount']:+.4f} ({exit_result['pnl_pct']:+.2f}%) {pnl_emoji} {result_text}")
                             else:
                                 # Early exit failed - check if we should force settlement
                                 logger.warning(f"Early exit failed for {strategy_name}, checking for forced settlement...")
@@ -622,7 +638,14 @@ class PaperTrader:
                                         pnl_amount=pnl_amount
                                     )
                                     
-                                    logger.info(f"🔒 Trade #{position['trade_id']} FORCED SETTLEMENT | {strategy_name} | {result} | P&L: ${pnl_amount:+.4f} ({pnl_pct:+.1f}%)")
+                                    # Log with Telegram format
+                                    side = "LONG" if side == 'YES' else "SHORT"
+                                    action = "CLOSE"
+                                    pnl_emoji = "🟢" if pnl_amount >= 0 else "🔴"
+                                    result_text = "PROFIT" if pnl_amount >= 0 else "LOSS"
+                                    
+                                    logger.info(f"🤖 TRADE TERMINAL ❌ {side} {action.lower()} (Forced Settlement) — {strategy_name}")
+                                    logger.info(f"  Result: {result} | PnL: ${pnl_amount:+.4f} ({pnl_pct:.2f}%) {pnl_emoji} {result_text}")
                                 
                     except Exception as e:
                         logger.error(f"Error processing position {strategy_name}: {e}")
@@ -671,7 +694,11 @@ class PaperTrader:
                         'side': result['side'],
                     }
                     
-                    logger.info(f"🔓 Trade #{trade_id} opened | {signal.strategy} | Price: {result['entry_price']:.4f}")
+                    side = "LONG" if result['side'] == 'YES' else "SHORT"
+                    action = "OPEN"
+                    
+                    logger.info(f"🤖 TRADE TERMINAL ✅ {side} {action.lower()} — {signal.strategy}")
+                    logger.info(f"  Entry: ${result['entry_price']:.4f} | Trade #{trade_id}")
                 
                 # Status
                 if self.cycle % 10 == 0:

@@ -14,8 +14,10 @@ class ScalperQuickExit(BaseStrategy):
     Hold time: 1-2 minutes max
     """
     
+    name: str = "ScalperQuickExit"
+    
     def __init__(self):
-        super().__init__("ScalperQuickExit")
+        super().__init__()
         self.entry_threshold = 0.50
         self.target = 0.55
         self.stop_loss = 0.48
@@ -51,8 +53,10 @@ class ScalperMediumHold(BaseStrategy):
     Hold time: 3-5 minutes
     """
     
+    name: str = "ScalperMediumHold"
+    
     def __init__(self):
-        super().__init__("ScalperMediumHold")
+        super().__init__()
         self.entry_threshold = 0.50
         self.target = 0.58
         self.stop_loss = 0.45
@@ -87,8 +91,10 @@ class ScalperAggressive(BaseStrategy):
     Hold time: 5-10 minutes
     """
     
+    name: str = "ScalperAggressive"
+    
     def __init__(self):
-        super().__init__("ScalperAggressive")
+        super().__init__()
         self.entry_threshold = 0.50
         self.target = 0.60
         self.stop_loss = 0.42
@@ -123,8 +129,10 @@ class ScalperTightStop(BaseStrategy):
     Hold time: 30-60 seconds
     """
     
+    name: str = "ScalperTightStop"
+    
     def __init__(self):
-        super().__init__("ScalperTightStop")
+        super().__init__()
         self.entry_threshold = 0.50
         self.target = 0.53
         self.stop_loss = 0.49
@@ -159,8 +167,10 @@ class ScalperWideTarget(BaseStrategy):
     Hold time: 10-15 minutes
     """
     
+    name: str = "ScalperWideTarget"
+    
     def __init__(self):
-        super().__init__("ScalperWideTarget")
+        super().__init__()
         self.entry_threshold = 0.50
         self.target = 0.65
         self.stop_loss = 0.40

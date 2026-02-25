@@ -14,8 +14,10 @@ class ContrarianFader(BaseStrategy):
     Exit: When price reverts closer to fundamental probability
     """
     
+    name: str = "ContrarianFader"
+    
     def __init__(self):
-        super().__init__("ContrarianFader")
+        super().__init__()
         self.emotional_keywords = ['trump', 'biden', 'lakers', 'yankees', 'cowboys', 'bitcoin', 'meme']
         self.max_position_size = 0.15  # 15% of capital max
         self.profit_target = 0.08  # 8% profit
